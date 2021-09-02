@@ -1,0 +1,8 @@
+logs/
+cripto_historic_kaggle/
+.cwcn.venv/
+checkpoints/
+ray_checkpoints/
+__pycache__/
+result/
+gauss_dumps/
