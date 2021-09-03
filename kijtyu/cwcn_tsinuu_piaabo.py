@@ -35,7 +35,6 @@ class TSINUU_ACTOR_CRITIC(nn.Module):
         self.min_sigma=torch.FloatTensor([0.001]).squeeze(0)
         self.sigma_gain=torch.FloatTensor([2.0]).squeeze(0)
         # self.log_sigma=nn.Parameter(torch.ones(uwaabo_size) * (sigma+self.min_sigma))
-        
     def _foward_munaajpi_(self,x):
         x=nn.Softsign()(self.ml_1(x))
         x=nn.Softsign()(self.ml_2(x))

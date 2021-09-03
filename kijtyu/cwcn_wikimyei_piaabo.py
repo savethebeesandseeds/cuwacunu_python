@@ -24,35 +24,38 @@ import cwcn_kemu_piaabo
 import cwcn_duuruva_piaabo
 # --- --- --- --- 
 class WIKIMYEI_STATE:
-    def __init__(self,state_size,action_size,reward_size):
-        self.c_state    = None
-        self.state_size=state_size
-        self.action_size=action_size
-        self.reward_size=reward_size
-        self.accomulated_reward = None
-        if(cwcn_config.CWCN_DUURUVA_CONFIG.ENABLE_DUURUVA_REWARD):
-            self.reward_duuruva = cwcn_duuruva_piaabo.DUURUVA(
-                _duuruva_vector_size=reward_size,
-                _wrapper_duuruva_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.NORMALIZE_REWARD)
+    def __init__(self,_wikimyei_config):
+        # --- --- 
+        self.c_config   = _wikimyei_config
+        # --- --- 
+        self.c_alliu    = None
+        self.c_imu      = None
+        self.accomulated_imu = None
+        # --- --- 
+        if(cwcn_config.CWCN_DUURUVA_CONFIG.ENABLE_DUURUVA_IMU):
+            self.imu_duuruva = cwcn_duuruva_piaabo.DUURUVA(
+                _duuruva_vector_size=self.wk_config['IMU_COUNT'],
+                _wrapper_duuruva_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.NORMALIZE_IMU)
+        # --- --- 
         
 class TRAYECTORY:
     def __init__(self):
-        self.reward     = None
+        self.imu        = None
         self.done       = None
         self.mask       = None
         self.returns    = None
-        self.state      = None
+        self.alliu      = None
         self.log_prob   = None
         self.value      = None
         # self.dist       = None
-        self.action     = None
+        self.tsane     = None
         self.advantage  = None
         self.gae        = None
         self.delta      = None
         self.entropy    = None
         self.index      = None
 # --- --- --- --- 
-class LOAD_QUEUE:
+class LOAD_QUEUE: #FIXME load can be better
     def __init__(self):
         self.only_data=True #FIXME this makes the detachs
         self.device=torch.device("cuda" if torch.cuda.is_available() else "cpu")

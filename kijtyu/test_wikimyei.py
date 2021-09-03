@@ -21,4 +21,4 @@ c_load_file=None
 if __name__ == "__main__":
     cwcn_kemu_piaabo.kemu_assert_dir(cwcn_config.CWCN_CONFIG().CHECKPOINTS_FOLDER)
     c_wikimyei=cwcn_wikimyei_nebajke.WIKIMYEI(cwcn_config.CWCN_CONFIG().__dict__,_load_file=c_load_file)
-    c_wikimyei.jkimyei._standalone_wikimyei_jkimyei_loop_()
+    c_wikimyei.jkimyei._standalone_wikimyei_jkimyei_ppo_loop_()

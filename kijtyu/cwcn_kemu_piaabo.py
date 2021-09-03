@@ -1,8 +1,13 @@
 # --- --- ---
 import os
 import sys
+# --- --- ---
+import torch
+# --- --- ---
 import cwcn_config
 # --- --- ---
+def kemu_to_tensor(asset):
+    return torch.FloatTensor([asset]).squeeze(0).to(cwcn_config.device)
 def kemu_assert_dir(__path):
     if not os.path.exists(__path):
         os.makedirs(__path)
