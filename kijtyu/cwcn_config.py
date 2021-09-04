@@ -34,17 +34,20 @@ def ray_log(message, *args, **kws):
 logging.ray_log = ray_log
 # --- --- --- --- 
 class CWCN_DUURUVA_CONFIG:
+    # --- --- 
     DUURUVA_MAX_COUNT = 100
-    READY_COUNT = 10
+    DUURUVA_READY_COUNT = 10
     MIN_STD = 0.005
-    NORMALIZE_IMU = False #FIXME agent learns to get bad imu to lower the mean
+    # --- --- 
     ENABLE_DUURUVA_IMU = False #FIXME agent learns to get bad imu to lower the mean
+    # --- --- GAE/PPO
+    NORMALIZE_IMU = True
+    NORMALIZE_RETURNS = True # needed for munaajpi to train, but weird #FIXME
+    NORMALIZE_ADVANTAGE = True
 # --- --- --- --- 
 class CWCN_OPTIONS:
     PLOT_FLAG           = False
     RENDER_FLAG         = True
-# --- --- --- --- 
-
 # --- --- --- --- 
 class CWCN_CONFIG:
     def __init__(self):
@@ -58,23 +61,25 @@ class CWCN_CONFIG:
     def _default_config_(self):
         # @property #FIXME implement or remove
         # --- --- 
+        self.HIPER_PROFILE_BUFFER_COUNT = 3 # amount of trayetories queue in hold
+        # --- --- 
         self.CHECKPOINTS_FOLDER  = os.path.normpath(os.path.join(os.path.realpath(__file__),"../checkpoints"))
         # --- --- 
-        self.AHPA_ID              = "MountainCarContinuous-v0"#"Pendulum-v0"#"MountainCarContinuous-v0"
+        self.AHPA_ID            = "MountainCarContinuous-v0"#"Pendulum-v0"#"MountainCarContinuous-v0"
         self.ALLIU_COUNT        = torch.Size([2]).numel() #FIXME is not parametric
         self.TSANE_COUNT        = torch.Size([1]).numel() #FIXME is not parametric
         # fixme add uwaabo
         self.IMU_COUNT          = torch.Size([2]).numel() #FIXME is not parametric
         # --- --- 
-        self.TRAINING_STEPS           = 256
-        self.TRAINING_EPOCHS          = 64
-        self.MINI_BATCH_COUNT     = 64
-        self.NUM_TESTS           = 3
-        self.VALIDATION_EPOCH         = 10 # how often to test the training # for standalone method
+        self.TRAINING_EPOCHS     = 64 # amount of mapps from HIPER_PROFILE_BUFFER_COUNT
+        self.AHDO_STEPS          = 256
+        self.MINI_BATCH_COUNT    = 32 # lower due to training by .mean()
+        self.NUM_TESTS           = 1
+        self.VALIDATION_EPOCH    = 10 # how often to test the training # for standalone method
         self.BREAK_TRAIN_EPOCH   = 1000 # max amount of EPOCHS # for standalone method
-        self.BREAK_TRAIN_IMU       = 0xFFFFFFFF
+        self.BREAK_TRAIN_IMU     = 0xFFFFFFFF
         # --- --- 
-        self.TEHDUJCO_LEARNING_RATE       = 4e-5
+        self.TEHDUJCO_LEARNING_RATE       = 4e-4
         self.TEHDUJCO_GAMMA               = 0.99
         self.TEHDUJCO_GAE_LAMBDA          = 0.95
         self.TEHDUJCO_IMU_BETA         = 0.1 # takes no effect when duuruva imu is active

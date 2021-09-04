@@ -6,3 +6,4 @@ ray_checkpoints/
 __pycache__/
 result/
 gauss_dumps/
+communications_config*

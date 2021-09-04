@@ -15,9 +15,12 @@ class TSINUU_ACTOR_CRITIC(nn.Module):
         self.ul_2=nn.Linear(UWAABO_HIDDEN_SIZE, UWAABO_HIDDEN_SIZE)
         self.ul_3=nn.Linear(UWAABO_HIDDEN_SIZE, UWAABO_HIDDEN_SIZE)
         self.ul_4=nn.Linear(UWAABO_HIDDEN_SIZE, UWAABO_HIDDEN_SIZE)
-        self.ul_5=nn.Linear(UWAABO_HIDDEN_SIZE, uwaabo_size)
         # --- 
-        self.ul_s1=nn.Linear(UWAABO_HIDDEN_SIZE, uwaabo_size)
+        self.ul_m1=nn.Linear(UWAABO_HIDDEN_SIZE, UWAABO_HIDDEN_SIZE)
+        self.ul_m2=nn.Linear(UWAABO_HIDDEN_SIZE, uwaabo_size)
+        # --- 
+        self.ul_s1=nn.Linear(UWAABO_HIDDEN_SIZE, UWAABO_HIDDEN_SIZE)
+        self.ul_s2=nn.Linear(UWAABO_HIDDEN_SIZE, uwaabo_size)
         # --- ---
         self.ml_1=nn.Linear(alliu_size, MUNAAJPI_HIDDEN_SIZE)
         self.ml_2=nn.Linear(MUNAAJPI_HIDDEN_SIZE, MUNAAJPI_HIDDEN_SIZE)
@@ -47,9 +50,12 @@ class TSINUU_ACTOR_CRITIC(nn.Module):
         x=nn.Softsign()(self.ul_2(x))
         x=nn.Softsign()(self.ul_3(x))
         x=nn.Softsign()(self.ul_4(x))
-        mu=nn.Softsign()(self.ul_5(x))
+        # --- --- 
+        mu=nn.Softsign()(self.ul_m1(x))
+        mu=nn.Softsign()(self.ul_m2(mu))
         # sigma = self.log_sigma.exp().expand_as(mu) + self.min_sigma
-        sigma=nn.Softmax(-1)(self.ul_s1(x))*self.sigma_gain + self.min_sigma
+        sigma=nn.Softsign()(self.ul_s1(x))
+        sigma=nn.Softmax(-1)(self.ul_s2(sigma))*self.sigma_gain + self.min_sigma
         # # print(x.shape)
         try:
             dist  = Normal(mu, sigma)

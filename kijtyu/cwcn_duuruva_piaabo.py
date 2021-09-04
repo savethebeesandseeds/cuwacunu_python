@@ -28,7 +28,7 @@ class DUURUVA:
             aux_d['skewness'] = 0
             self._duuruva.append(aux_d)
     def _is_duuruva_ready_(self):
-        return cwcn_config.CWCN_DUURUVA_CONFIG.READY_COUNT<=self._d_count
+        return cwcn_config.CWCN_DUURUVA_CONFIG.DUURUVA_READY_COUNT<=self._d_count
     def duuruva_value_wrapper(self,c_vect,_batch_size=None): #FIXME ugly method
         # batch_first if _batch_size != None
         assert(torch.is_tensor(c_vect)), "Duuruva is a tensor based method"

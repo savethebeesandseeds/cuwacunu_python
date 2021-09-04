@@ -52,6 +52,8 @@ class WIKIMYEI:
         if(_load_file is not None and os.path.isfile(_load_file)):
             self._load_wikimyei_(_load_file)
         # --- --- 
+        self.hyper_load = None
+        # --- --- 
     def _save_wikimyei_(self,__path): # add model config
         logging.info("saving model to file <{}>".format(__path))
         torch.save((self.model.state_dict(), self.jkimyei.optimizer.state_dict(), self.wk_config), __path)
@@ -81,14 +83,16 @@ class WIKIMYEI:
         if(self.wk_config['AHPA_ID']=="MountainCarContinuous-v0"):
             # return cwcn_kemu_piaabo.kemu_to_tensor(imu_value) + torch.dot(cwcn_kemu_piaabo.kemu_to_tensor([2.0,0.1]),cwcn_kemu_piaabo.kemu_to_tensor([self.wk_state.c_alliu[0]+0.5,abs(self.wk_state.c_alliu[1])])) + (0 if torch.round(self.wk_state.c_alliu[0]*10**3)/(10**3)==0.5 else 100)
             c_imu=self.wk_config['TEHDUJCO_IMU_BETA']*(torch.dot(cwcn_kemu_piaabo.kemu_to_tensor(
-                        [25.0,2.0]),
-                        cwcn_kemu_piaabo.kemu_to_tensor([(self.wk_state.c_alliu[0]+0.5),abs(self.wk_state.c_alliu[1])
+                        [250.0,500.0]),
+                        cwcn_kemu_piaabo.kemu_to_tensor([(self.wk_state.c_alliu[0]-0.5),abs(self.wk_state.c_alliu[1])
                     ])) \
-                + (200 if torch.round(self.wk_state.c_alliu[0]*10**1)/(10**1)==0.5 else 0) \
+                + (1000 if torch.round(self.wk_state.c_alliu[0]*10**1)/(10**1)==0.5 else 0) \
                 + (10 if self.wk_state.c_alliu[0]>-.2 else 0) \
                 + (10 if self.wk_state.c_alliu[0]>0.0 else 0) \
                 + (10 if self.wk_state.c_alliu[0]>0.2 else 0) \
-                + (0 if self.wk_state.c_alliu[0]>-0.95 else -100))
+                + (50 if self.wk_state.c_alliu[0]>0.4 else 0) \
+                + (0 if abs(self.wk_state.c_alliu[1])>0.005 else -50) \
+                + (0 if self.wk_state.c_alliu[0]>-1.1 else -100))
         else:
             c_imu=cwcn_kemu_piaabo.kemu_to_tensor(imu_value)
         # --- --- 
@@ -100,39 +104,39 @@ class WIKIMYEI:
     def _reset_(self):
         self.wk_state.c_alliu=cwcn_kemu_piaabo.kemu_to_tensor(self.ahpa.reset())
         self.wk_state.accomulated_imu=cwcn_kemu_piaabo.kemu_to_tensor(0.0)
-    def _wk_step_(self,__wt : cwcn_wikimyei_piaabo.TRAYECTORY = None):
+    def _wk_step_(self,ahdo_trayectory : cwcn_wikimyei_piaabo.AHDO_PROFILE = None):
         # --- ---
         if(self.wk_state.c_alliu is None):
             self._reset_()
-        if(__wt is None):
-            __wt=cwcn_wikimyei_piaabo.TRAYECTORY()
+        if(ahdo_trayectory is None):
+            ahdo_trayectory=cwcn_wikimyei_piaabo.AHDO_PROFILE()
         # --- ---
-        dist, __wt.value=self.model(self.wk_state.c_alliu)
-        __wt.tsane, _, __wt.log_prob, __wt.entropy=self._dist_to_tsane_(dist)
-        # print("[size of sate:] {}, [tsane:] {}".format(self.wk_state.c_alliu, __wt.tsane))
+        dist, ahdo_trayectory.value=self.model(self.wk_state.c_alliu)
+        ahdo_trayectory.tsane, _, ahdo_trayectory.log_prob, ahdo_trayectory.entropy=self._dist_to_tsane_(dist)
+        # print("[size of sate:] {}, [tsane:] {}".format(self.wk_state.c_alliu, ahdo_trayectory.tsane))
         # --- ---
-        c_alliu, c_imu, c_done, _=self.ahpa.step(__wt.tsane.cpu().numpy())
+        c_alliu, c_imu, c_done, _=self.ahpa.step(ahdo_trayectory.tsane.cpu().numpy())
         # logging.info("reward : {}, State : {}".format(imu,next_state))
         # --- ---
         self.wk_state.c_alliu=cwcn_kemu_piaabo.kemu_to_tensor(c_alliu)
-        __wt.alliu=self.wk_state.c_alliu
+        ahdo_trayectory.alliu=self.wk_state.c_alliu
         # --- ---
-        __wt.imu=self._transform_imu_(c_imu)
-        self.wk_state.accomulated_imu+=__wt.imu
-        # logging.info("Reward : {}, transformed_reward: {}".format(c_imu, __wt.imu))
-        __wt.mask=cwcn_kemu_piaabo.kemu_to_tensor(1 - bool(c_done))
-        __wt.done=cwcn_kemu_piaabo.kemu_to_tensor(c_done)
-        # logging.info("[STATE:] {}, [ACTION:] {}, [DONE:] {}".format(__wt.alliu,__wt.action,__wt.done))
-        return c_done
+        ahdo_trayectory.imu=self._transform_imu_(c_imu)
+        self.wk_state.accomulated_imu+=ahdo_trayectory.imu
+        # logging.info("Reward : {}, transformed_reward: {}".format(c_imu, ahdo_trayectory.imu))
+        ahdo_trayectory.mask=cwcn_kemu_piaabo.kemu_to_tensor(1 - bool(c_done))
+        ahdo_trayectory.done=cwcn_kemu_piaabo.kemu_to_tensor(c_done)
+        ahdo_trayectory.selec_prob=1.0 #FIXME make it not uniform
+        # logging.info("[STATE:] {}, [ACTION:] {}, [DONE:] {}".format(ahdo_trayectory.alliu,ahdo_trayectory.action,ahdo_trayectory.done))
+        return c_done, ahdo_trayectory
     def _test_wikimyei_on_ahpa_(self,render_flag=False):
         total_imu=cwcn_kemu_piaabo.kemu_to_tensor(0.)
         ctx_steps=0
         self._reset_()
         while True: # Test until is ready
             ctx_steps+=1
-            __wt=cwcn_wikimyei_piaabo.TRAYECTORY()
-            done=self._wk_step_(__wt)
-            total_imu+=__wt.imu
+            done, ahdo_t=self._wk_step_()
+            total_imu+=ahdo_t.imu
             if(render_flag):
                 self.ahpa.render()
             if(done):
