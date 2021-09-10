@@ -96,7 +96,7 @@ class WIKIMYEI:
         else:
             c_imu=cwcn_kemu_piaabo.kemu_to_tensor(imu_value)
         # --- --- 
-        c_imu=self.wk_state.imu_duuruva.duuruva_value_wrapper(c_imu) if cwcn_config.CWCN_DUURUVA_CONFIG.ENABLE_DUURUVA_IMU else c_imu
+        c_imu=self.wk_state.imu_duuruva._duuruva_value_wrapper_(c_imu) if cwcn_config.CWCN_DUURUVA_CONFIG.ENABLE_DUURUVA_IMU else c_imu
         # --- --- 
         self._imu_state = c_imu
         # --- --- 

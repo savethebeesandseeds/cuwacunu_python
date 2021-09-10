@@ -58,7 +58,7 @@ class TSINUU_ACTOR_CRITIC(nn.Module):
         sigma=nn.Softmax(-1)(self.ul_s2(sigma))*self.sigma_gain + self.min_sigma
         # # print(x.shape)
         try:
-            dist  = Normal(mu, sigma)
+            dist  = ...Categorical...Normal(mu, sigma)
         except Exception as e:
             print("ERROR:",e)
             print("mu:",mu)

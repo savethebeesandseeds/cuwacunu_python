@@ -65,6 +65,7 @@ a=lam(torch.distributions)
 
 
 import ast
+ast.literal_eval('print(waka)')
 
 munamunaake_distributions={
 '__name__':{'':None},

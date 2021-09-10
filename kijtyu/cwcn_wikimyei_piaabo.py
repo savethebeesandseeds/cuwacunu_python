@@ -111,7 +111,7 @@ class HYPER_PROFILE_QUEUE:
             logging.warning("[_ph_load_heal_] : %s load size : {} higher than buffer size : {} %s".format(self.load_size,self.buffer_size) % (cwcn_config.CWCN_COLORS.WARNING, cwcn_config.CWCN_COLORS.REGULAR))
         return healt_flag
     def _plot_itm_(self,itm):
-        cwcn_kemu_piaabo.kemu_plot_itm(self,itm)
+        cwcn_kemu_piaabo.kemu_plot_queue_item(self,itm)
 # --- --- --- --- 
 class LEARNING_LOAD_QUEUE: #FIXME load can be better
     def __init__(self):
@@ -165,9 +165,10 @@ class LEARNING_LOAD_QUEUE: #FIXME load can be better
                 logging.warning("[_ll_load_heal_] : %s load index : {} does not match load placement : {} %s".format(_t.index,_i) % (cwcn_config.CWCN_COLORS.WARNING, cwcn_config.CWCN_COLORS.REGULAR))
         return healt_flag
     def _plot_itm_(self,itm):
-        cwcn_kemu_piaabo.kemu_plot_itm(self,itm)
+        cwcn_kemu_piaabo.kemu_plot_queue_item(self,itm)
 # --- --- --- --- 
 class AHDO_LOAD_QUEUE: #FIXME load can be better
+    # adho is the place, the whiakaju of things.
     def __init__(self):
         self._reset_queue_()
     # --- --- 
@@ -284,5 +285,5 @@ class AHDO_LOAD_QUEUE: #FIXME load can be better
             aux_vect=cwcn_kemu_piaabo.kemu_normalize(self._queue_itm_to_vect_(_o,_type))
             self._load_vect_to_queue_(_o,aux_vect)
     def _plot_itm_(self,itm):
-        cwcn_kemu_piaabo.kemu_plot_itm(self,itm)
+        cwcn_kemu_piaabo.kemu_plot_queue_item(self,itm)
 # --- --- --- --- 

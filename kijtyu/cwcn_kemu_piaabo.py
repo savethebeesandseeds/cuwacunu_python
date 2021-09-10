@@ -28,7 +28,7 @@ def kemu_pretty_print_object(d, indent=0, set_ident=26):
         else:
             sys.stdout.write('\t' * (indent+1) + "{}{}{}\n".format(cwcn_config.CWCN_COLORS.GREEN,str(value),cwcn_config.CWCN_COLORS.REGULAR))
     sys.stdout.flush()
-def kemu_plot_itm(c_queue,itm):
+def kemu_plot_queue_item(c_queue,itm):
         # --- ---
         d_vects=c_queue._dict_vectorize_queue_(_type='array')
         # --- ---
