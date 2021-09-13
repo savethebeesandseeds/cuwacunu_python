@@ -1,5 +1,6 @@
 # --- --- 
 import sys
+from matplotlib import ticker
 sys.path.append('../communications/')
 # --- --- 
 import torch
@@ -20,7 +21,7 @@ assert(cwcn_config.CWCN_INSTRUMENT_CONFIG.EXCHANGE=='POLONIEX'), "unrecognized e
 # --- ---
 class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
     def __init__(self, _ujcamei_cajtucu):
-        self.sequence_size = cwcn_config.CWCN_CONFIG().UJCAMEI_ALLIU_SEQUENCE_SIZE
+        self.sequence_size = cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_ALLIU_SEQUENCE_SIZE
         self.new_tick_aviable_on_queue = False
         self.uc=_ujcamei_cajtucu
         self.price_duuruva=cwcn_duuruva_piaabo.DUURUVA(_duuruva_vector_size=0x01, _d_name='price_duuruva'.upper(),
@@ -33,7 +34,7 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
             _wrapper_duuruva_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.NORMALIZE_ALLIU_PRICE_DELTA)
         self.time_delta_duuruva=cwcn_duuruva_piaabo.DUURUVA(_duuruva_vector_size=0x01, _d_name='time_delta_duuruva'.upper(),
             _wrapper_duuruva_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.NORMALIZE_ALLIU_TIME_DELTA)
-        self.alliu_sequence_tensor=torch.zeros((self.sequence_size,cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.ALLIU_LEN)).to(cwcn_config.device)
+        self.alliu_sequence_tensor=torch.zeros((self.sequence_size,cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.ALLIU_COUNT)).to(cwcn_config.device)
         self.instrument_queue=[]
     def _c_instrument_state_(self):
         if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
@@ -62,11 +63,11 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
                 _healt_flag&=_iq['ts']>aux_ts
         if(not _healt_flag):
             logging.error("[HEALT] Unhealty load detected for UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION")
-        self._step_flgs['healt_checked']=True
+        self.uc._step_flgs['healt_checked']=True
         return _healt_flag
     def _load_instrument_representation_(self):
         c_max_count=max(self.sequence_size,cwcn_config.CWCN_DUURUVA_CONFIG.DUURUVA_READY_COUNT)
-        c_instrument_history=self.uc._echange_instrument.market.get_trade_history(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
+        c_instrument_history=self.uc._echange_instrument.market_instrument.get_trade_history(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
         logging.info("[request] trade history : {}, brought size:{}".format(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL, len(c_instrument_history)))
         c_instrument_history+=self.instrument_queue
         c_instrument_history=[_d1 for _n1,_d1 in enumerate(c_instrument_history) if _d1['ts'] not in [_d2['ts'] for _d2 in c_instrument_history[_n1+1:]]] # filter duplicates timestamp
@@ -91,7 +92,7 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
         _dict['ts']=int(_dict['ts'])
         # --- --- --- 
         if(self.new_tick_aviable_on_queue==True): # ticked arrived too fast for prossesing unit; accomulating tick
-            logging.error("Not expected behaviour; double update, inconclusive (appending method need to be FIX!)")
+            logging.error("Not expected behaviour; double update or error state, inconclusive (appending method need to be FIX!)")
             if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
                 c_index=0
             else:
@@ -101,7 +102,7 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
             self.instrument_queue[c_index]['side']=_dict['side']
             self.instrument_queue[c_index]['ts']=_dict['ts']
             self.instrument_queue[c_index]['currentQty']=self.uc._uc_position_.currentQty
-        self.new_tick_aviable_on_queue=True...
+        self.new_tick_aviable_on_queue=True
         if(len(self.instrument_queue)!=0):
             if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
                 past_dict=self.instrument_queue[0]
@@ -117,7 +118,7 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
             'time_delta':_dict['ts']-past_dict['ts'],
             'price_delta':_dict['price']-past_dict['price'],
             'ts':_dict['ts'],
-            'sequence':_dict['sequence'],
+            # 'sequence':_dict['sequence'],
             'currentQty':self.uc._uc_position_.currentQty,
         }
         if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
@@ -157,7 +158,7 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
         ]).to(cwcn_config.device)
         self._update_alliu_sequence_(c_tensor)
         self.new_tick_aviable_on_queue=False
-        self._step_flgs['instrument_updated']=True
+        self.uc._step_flgs['instrument_updated']=True
 
     def _get_alliu_(self):
         return self.alliu_sequence_tensor
@@ -172,6 +173,8 @@ class UJCAMEI_CAJTUCU_POSITION:
     def __init__(self,_ujcamei_cajtucu):
         self.uc=_ujcamei_cajtucu
         # self.position_size = None #FIXME not used; count, signed -sell and +buy
+        self._reset_position_()
+    def _reset_position_(self):
         self.realisedPnl = None
         self.unrealisedPnl = None
         self.currentQty = None
@@ -218,27 +221,26 @@ class UJCAMEI_CAJTUCU_POSITION:
         #     "bankruptPrice": 1000000,//Bankruptcy price
         #     "settleCurrency": "XBT"                         //Currency used to clear and settle the trades     
         # }
-        _dict=self.uc._echange_instrument.trade.get_position_details(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
-        logging.info("[UPDATE POSITION] {}".format(_dict))
+        _dict=self.uc._echange_instrument.trade_instrument.get_position_details(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
+        logging.ujcamei_logging("[UPDATE POSITION] {}".format(_dict))
         self.realisedPnl    = _dict['realisedPnl']
         self.unrealisedPnl  = _dict['unrealisedPnl']
         self.currentQty     = _dict['currentQty']
         self.isOpen         = _dict['isOpen']
         self.uc._step_flgs['position_updated']=True
-
+        self.uc._uc_wallet_._update_wallet_(_dict)
         # self.realisedCost   = _dict['realisedCost']
         # self.unrealisedCost = _dict['unrealisedCost']
 class UJCAMEI_CAJTUCU_WALLET:
     def __init__(self,_ujcamei_cajtucu):
         self.uc=_ujcamei_cajtucu
+        self._reset_wallet_()
+    def _reset_wallet_(self):
         self.currency = None
         self.orderMargin = None
         self.availableBalance = None
-        self.realized_pnl = None #FIXME not used
-        self.unrealized_pnl = None #FIXME not used
-        self._initialize_wallet_()
-    def _initialize_wallet_(self):
-        self._update_wallet_(self.uc._echange_instrument.user.get_account_overview())
+        self.realisedPnl = None #FIXME not used
+        self.unrealisedPnl = None #FIXME not used
     def _request_info_(self):pass
     def _update_wallet_(self,_dict):
         uc_dict_keys = list(self.__dict__.keys())
@@ -250,8 +252,8 @@ class UJCAMEI_CAJTUCU_WALLET:
         self.uc._step_flgs['wallet_been_updated']=True
         # self.uc._uc_position_._update_position_()
 class KUJTIYU_UJCAMEI_CAJTUCU:
-    def __init__(self):
-        logging.info("Initializating UJCAMEI_CAJTUCU module")
+    def __init__(self,_wikimyei):
+        logging.ujcamei_logging("Initializating UJCAMEI_CAJTUCU module")
         if(cwcn_config.PAPER_INSTRUMENT):
             self._echange_instrument=cwcn_simulation_kijtyu.EXCHANGE_INSTRUMENT(\
                 _call_function=self._ujcamei_)
@@ -261,17 +263,31 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
                 _websocket_subs=cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.WEB_SOCKET_SUBS)
             self._echange_instrument_loop=asyncio.get_event_loop()
         # --- --- 
+        self.wk_ujcamei_cajtucu=_wikimyei
+        self._reset_step_flags_()
         self._uc_wallet_= UJCAMEI_CAJTUCU_WALLET(self)
         self._uc_position_= UJCAMEI_CAJTUCU_POSITION(self)
         self._uc_instrumet = UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION(self)
         self._uc_instrumet._load_instrument_representation_()
+    def _reset_step_flags_(self):
+        self._step_flgs = {
+            'is_done_checked':False,
+            'healt_checked':False,
+            'instrument_updated':False,
+            'position_updated':False,
+            'wallet_been_updated':False,
+            'action_taken':False,
+            'action_taken':False,
+            'action_taken':False,
+            'reward_given':False,
+        }
     def _ujcamei_raise_(self, msg, aux_msg=None):
         self._uc_instrumet.new_tick_aviable_on_queue=False
         logging.warning("[UJCAMEI] found unrecognized message comming from websocket : {} - {}".format(msg, aux_msg if aux_msg is not None else '')) #FIXME, close all orders on error
     def _ujcamei_(self,msg):
         # --- --- --- --- 
         try:
-            logging.info('[UJCAMEI] <upcoming message> {}'.format(msg))
+            logging.ujcamei_logging('[UJCAMEI] (upcoming message) {}'.format(msg))
             if('type' in list(msg.keys()) and msg['type'] in ['welcome',"ack","pong"]):
                 # {
                 #   'id': '49bae88d-c26a-4448-9028-8d313d599f63', 'type': 'welcome'/'pong'
@@ -395,24 +411,31 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
                 self._ujcamei_raise_(msg, '[unregocnized topic]')
         except Exception as e:
             self._ujcamei_raise_(e, "[EXCEPTION ERROR]")
-    # --- --- --- --- --- --- 
-    def take_action(self,_tsane : int):
-        _action=cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TSANE_ACTION_DICT[_tsane]
+    # --- --- --- --- 
+    # --- --- --- --- --- 
+    # --- --- --- --- --- --- ENVIROMENT
+    # --- --- --- --- --- 
+    # --- --- --- --- 
+    def _take_action_(self,_tsane : int):
+        if(torch.is_tensor(_tsane)):
+            _action=cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TSANE_ACTION_DICT[_tsane.detach().item()]
+        else:
+            _action=cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TSANE_ACTION_DICT[_tsane]
         if(cwcn_config.ALLOW_TSANE):
             if(_action == 'pass'):
-                logging.tsane_logging(":   . | .   : pass : {} : {}".format(_tsane,_action))
+                logging.tsane_logging(":   · | ·   : pass : {} : {}".format(_tsane,_action))
                 self._step_flgs['action_taken']=True
             elif(_action == 'call'):
-                logging.tsane_logging(": | .   .   : buy  : {} : {}".format(_tsane,_action))
-                self._echange_instrument.trade.create_market_order(\
+                logging.tsane_logging(": | ·   ·   : buy  : {} : {}".format(_tsane,_action))
+                self._echange_instrument.trade_instrument.create_market_order(\
                     symbol=cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,
                     side='buy',
                     size=1,
                     leverage=0)
                 self._step_flgs['action_taken']=True
             elif(_action == 'put'):
-                logging.tsane_logging(":   .   . | : sell : {} : {}".format(_tsane,_action))
-                self._echange_instrument.trade.create_market_order(\
+                logging.tsane_logging(":   ·   · | : sell : {} : {}".format(_tsane,_action))
+                self._echange_instrument.trade_instrument.create_market_order(\
                     symbol=cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,
                     side='sell',
                     size=1,
@@ -427,41 +450,68 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
         return self._uc_instrumet._get_alliu_()
     def _get_reward_(self):
         self._step_flgs['reward_given']=True
-
-        ...
+        if(not self._step_flgs['wallet_been_updated']):
+            logging.error("update wallet before getting reward")
+        return self._uc_wallet_.realisedPnl+self._uc_wallet_.availableBalance
     def _get_if_is_done_(self):
-        ...
+        self._step_flgs['is_done_checked']=True
+        return False #FIXME never done
     def _request_info_(self):
         return {
-        'README.rc4': rcsi_utils.RCsi_CRYPT("TEHDUJUCO","los monos juegan a la divinidad por el combate de los recursos ('piaabo==ayuda') \
-        la busqueda por el sentimiento que es sincero ('adho'==lugar) si los datos ('alliu'==mentira) y el procedimiento es de un mono \
-        que evita juegar a la divinidad con bendiciones (''duuruva''==bendición); una 'vendición' traduce aquel mono que por cualquier cosa --ahora \
-        que no existe más dinero-- se vende; y el mercado bendice a los que le resuelven y yo quiero resolverlo a corresponde a mi asignar la práctica \
-        de lo que está bendito en las ecuaciones. en mi no hay eso bendito que combate por los recursos y tampoco lo habita mi código: \
-        el ('tsodaho') proteje el ('nebajke') del que estando vivo combate de si la sinceridad o gracia, al consciente recaudo de dicha y tiempo."),
+        # 'README.rc4': rcsi_utils.RCsi_CRYPT("TEHDUJUCO","el miamunaake juega el té de la divinidad por combatir recursos ('piaabo==ayuda') \
+        # la busqueda por el sentimiento que es sincero ('adho'==lugar) si los datos ('alliu'==mentira); el método es en whiakaju y las decisiónes \
+        # que esquivan sacar la lengua en el juego de vendiciones (''duuruva''=='vendición'); ahora que no existe más el maldito oro, quién podrá \
+        # venderse por una vendición; y el mercado bendice a los que le resuelven, resolverlo por corresponderme parte de la arábica hazaña \
+        # de lo que está bendito en las ecuaciones; en mi no hay eso bendito que se combate a sí por los recursos y tampoco lo habita mi código: \
+        # les juro un ('tsodaho') protejiendo el ('nebajke') del que estando vivo combate en si la gracia sincera al consciente recaudo de dicha y tiempo."),
             'reward_was_value' : None,
             'alliu_was_value' : None,
             'done_was_value' : None,
         }
     def _wait_for_step_(self):
         if(cwcn_config.PAPER_INSTRUMENT):
-            self._echange_instrument.simulation_step_ticker()
+            if(not self._echange_instrument.market_instrument.simulation_step_ticker(symbol=cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)):
+                logging.warning("RESETING DATA ADQUISITION, RESTARTING FILE ITERATION")
+                self._uc_instrumet._load_instrument_representation_()
         else:
             while(not self.new_tick_aviable_on_queue):
                 self._echange_instrument_loop.run_until_complete(asyncio.sleep(0.05))
-    def _assert_step_(self):
+            # sys.stdout.write("··· waiting for tick ···")
+            # sys.stdout.write(cwcn_config.CWCN_CURSOR.CARRIER_RETURN)
+            # sys.stdout.write(cwcn_config.CWCN_CURSOR.CLEAR_LINE)
+    def _assert_step_flags_(self):
         self.step_bugger_flag=all([self._step_flgs[_f] for _f in list(self._step_flgs.keys())])
-        if(self.step_bugger_flag):
-            logging.error(self.step_bugger_flag), "step is found defetive"
-        self.step_bugger_flag=False
-    def step(self,_tasne):
-        if(torch.is_tensor(_tasne)):
-            self.take_action(_tasne.detach().numpy())
-        else:
-            self.take_action(_tasne)
+        if(not self.step_bugger_flag):
+            logging.error("step is found defetive : {}".format(self._step_flgs))
+    def step(self,_tsane):
+        self._reset_step_flags_()
+        self._take_action_(_tsane)
         self._wait_for_step_()
-        self._assert_step_()
-        return self._get_alliu_(), self._get_reward_(), self._get_if_is_done_(), self._request_info_()
+        c_alliu=self._get_alliu_()
+        c_done=self._get_if_is_done_()
+        c_info=self._request_info_()
+        c_reward=self._get_reward_()
+        self._assert_step_flags_()
+        sys.stdout.write("{}{}\t\t\t\t\t\t\t\t\t\t imu : {}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,c_reward))
+        sys.stdout.flush()
+        return c_alliu,c_reward,c_done,c_info
+    def reset(self): #FIXME reset is not implemented
+        if(cwcn_config.PAPER_INSTRUMENT):
+            self._echange_instrument.user_instrument._reset_()
+            self._echange_instrument.trade_instrument._reset_()
+            self._echange_instrument.market_instrument._reset_()
+            # --- 
+        else:
+            logging.warning("reset is not thougth trught on non paper instrument")
+            self._update_wallet_(self.uc._echange_instrument.user_instrument.get_account_overview())
+        # --- --- 
+        self.wk_ujcamei_cajtucu.wk_state._reset_()
+        # --- --- 
+        c_alliu,_,__,__=self.step(list(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TSANE_ACTION_DICT.keys())[list(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TSANE_ACTION_DICT.values()).index('pass')])
+        # --- --- 
+        return c_alliu
+    def render(self):
+        pass
 if __name__=="__main__":
     ujcamei_cajtucu=KUJTIYU_UJCAMEI_CAJTUCU()
     print("--- --- --- --- ")
@@ -472,11 +522,11 @@ if __name__=="__main__":
     print("--- --- --- --- ")
     print("--- --- --- --- ")
     print("--- --- --- --- ")
-    ujcamei_cajtucu.step(0)
+    print(ujcamei_cajtucu.step(0))
     print("--- --- --- --- ")
-    ujcamei_cajtucu.step(1)
+    print(ujcamei_cajtucu.step(1))
     print("--- --- --- --- ")
-    ujcamei_cajtucu.step(2)
+    print(ujcamei_cajtucu.step(2))
     print("--- --- --- --- ")
     # ujcamei_cajtucu._uc_instrumet.price_duuruva._plot_duuruva_()
     # ujcamei_cajtucu._uc_instrumet.size_duuruva._plot_duuruva_()

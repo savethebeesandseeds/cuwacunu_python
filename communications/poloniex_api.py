@@ -52,9 +52,9 @@ class EXCHANGE_INSTRUMENT:
                 secret=rcsi_utils.RCsi_CRYPT(communications_config.PLX_FUT_ADA_CONFIG.RCsi_KEY,communications_config.PLX_FUT_ADA_CONFIG.API_SECRET), 
                 passphrase=rcsi_utils.RCsi_CRYPT(communications_config.PLX_FUT_ADA_CONFIG.RCsi_KEY,communications_config.PLX_FUT_ADA_CONFIG.API_PASS)
             )
-            self.market = self.rest_client.market_api()
-            self.trade = self.rest_client.trade_api()
-            self.user = self.rest_client.user_api()
+            self.market_instrument = self.rest_client.market_api()
+            self.trade_instrument = self.rest_client.trade_api()
+            self.user_instrument = self.rest_client.user_api()
         else:
             logging.info("[start:] EXCHANGE INSTRUMENT [farm]")
             self._farm_files=None
@@ -141,25 +141,25 @@ class EXCHANGE_INSTRUMENT:
         await self.ws_client.subscribe(f'/contractMarket/ticker:{cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL}')
     def _market_methods_(self):
         # Fetch MarketData
-        # server_time = self.market.get_server_timestamp()
+        # server_time = self.market_instrument.get_server_timestamp()
         # logging.info("[server_time:] {}".format(json.dumps(server_time,sort_keys=True,indent=4)))
-        # l3_depth = self.market.get_l3_order_book(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
+        # l3_depth = self.market_instrument.get_l3_order_book(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
         # logging.info("[l3_depth:] {}".format(json.dumps(l3_depth,sort_keys=True,indent=4)))
-        # l2_depth = self.market.get_l2_order_book(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
+        # l2_depth = self.market_instrument.get_l2_order_book(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
         # logging.info("[l2_depth:] {}".format(json.dumps(l2_depth,sort_keys=True,indent=4)))
-        klines = self.market.get_ticker(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
+        klines = self.market_instrument.get_ticker(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
         logging.info("[klines:] {}".format(json.dumps(klines,sort_keys=True,indent=4)))
         pass
     def _trade_methods_(self):
         # Trade Functions
-        # cancel_id = trade.cancel_order(order_id['orderId'])
-        # order_id = trade.create_limit_order(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL, 'buy', '1', '30', '8600')
-        # order_id = trade.create_limit_order(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL, 'buy', '1', '30', '8600')
-        # cancel_all = trade.cancel_all_limit_orders(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
+        # cancel_id = trade_instrument.cancel_order(order_id['orderId'])
+        # order_id = trade_instrument.create_limit_order(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL, 'buy', '1', '30', '8600')
+        # order_id = trade_instrument.create_limit_order(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL, 'buy', '1', '30', '8600')
+        # cancel_all = trade_instrument.cancel_all_limit_orders(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
         pass
     def _user_methods_(self):
         # User Account Functions
-        account_overview = self.user.get_account_overview()
+        account_overview = self.user_instrument.get_account_overview()
         logging.info("[account_overview:] {}".format(json.dumps(account_overview,sort_keys=True,indent=4)))
 
 # --- --- --- --- SEND REQUEST
@@ -884,7 +884,7 @@ if __name__=='__main__':
     c_trade_instrument = EXCHANGE_INSTRUMENT(_is_farm=False)
     # time.sleep(30)
     c_trade_instrument._market_methods_()
-    logging.info(json.dumps(c_trade_instrument.market.get_trade_history(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL),indent=4))
+    logging.info(json.dumps(c_trade_instrument.market_instrument.get_trade_history(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL),indent=4))
     # asyncio.run(c_trade_instrument._ws_methods_())
     # asyncio.run(c_trade_instrument._ticker_data_farm_())
     # c_trade_instrument._user_methods_()

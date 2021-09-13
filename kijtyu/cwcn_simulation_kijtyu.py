@@ -2,11 +2,11 @@
 # --- --- --- --- no async needed
 import ast
 import random
-# --- --- --- --- 
 from uuid import uuid4
-# --- --- --- --- 
 import os
+import sys
 import logging
+# --- --- --- --- 
 # --- --- --- --- 
 import cwcn_config
 # --- --- -- --- 
@@ -31,37 +31,42 @@ class EXCHANGE_INSTRUMENT:
         logging.info("[ready:] (simulation) EXCHANGE INSTRUMENT")
     # --- --- --- 
     def _make_all_step_updates_(self):
-        self._load_tick_()
-        self._update_current_orders_state_pnl_()
-        self._close_open_orders_by_prob_()
-        self.user_instrument._update_account_overview_()
+        if(self.market_instrument._load_tick_()):
+            self.trade_instrument._update_current_orders_state_pnl_()
+            self.trade_instrument._close_open_orders_by_prob_()
+            self.user_instrument._update_account_overview_()
+            return True
+        else:
+            return False
     def _invoke_ujcamei_cajtucu_(self):
-        self.ei.call_function({
+        self.call_function({
             'topic':'/contractAccount/wallet',
             'subject': 'availableBalance.change',
             'data':{
-                "availableBalance": self.acc_overview_state['availableBalance'],
-                "currency":self.acc_overview_state['currency'],
+                "availableBalance": self.user_instrument.acc_overview_state['availableBalance'],
+                "currency":self.user_instrument.acc_overview_state['currency'],
             }
         })
-        self.ei.call_function({
+        self.call_function({
             'topic':'/contractMarket/ticker',
             'subject': 'ticker',
             'data':{
                 "symbol": cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,
-                "price": self._instrument_state['price'],
-                "side": self._instrument_state['side'],
-                "size": self._instrument_state['size'],
-                "ts": self._instrument_state['ts'],
+                "price": self.market_instrument._instrument_state['price'],
+                "side": self.market_instrument._instrument_state['side'],
+                "size": self.market_instrument._instrument_state['size'],
+                "ts": self.market_instrument._instrument_state['ts'],
             },
         })
 # --- --- --- --- MARKET 
 class MarketClient:
     def __init__(self, _exchange_instrument):
         self.ei=_exchange_instrument
-        self._instrument_state=None
         self._request_file_path = os.path.join(cwcn_config.CWCN_SIMULATION_CONFIG.DATA_FOLDER,"{}{}".format(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,cwcn_config.CWCN_SIMULATION_CONFIG.DATA_EXTENSION))
         self._load_file_()
+        self._reset_()
+    def _reset_(self):
+        self._instrument_state=None
     def _load_file_(self):
         self._request_file=open(self._request_file_path,'r')
         for _ in range(cwcn_config.CWCN_SIMULATION_CONFIG.SKIP_N_DATA):
@@ -80,20 +85,29 @@ class MarketClient:
         The real-time ticker includes the last traded price, the last traded size, transaction ID, the side of liquidity taker, the best bid price and size, the best ask price and size as well as the transaction time of the orders.
         These messages can also be obtained through Websocket. The Sequence Number is used to judge whether the messages pushed by Websocket is continuous."""
         assert(symbol==cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL), "wrong symbol detected on get ticker (simulation)"
-        self.ei._make_all_step_updates_()
-        self.ei._invoke_ujcamei_cajtucu_()
-        return self._instrument_state
+        if(self.ei._make_all_step_updates_()):
+            self.ei._invoke_ujcamei_cajtucu_()
+            return self._instrument_state
+        else:
+            return False
     def _load_tick_(self):
         # dont use, use simulation_step_ticker instead
-        c_tick=next(self._request_file).replace(',\n','')
-        self._instrument_state=ast.literal_eval(c_tick)
-        return self._instrument_state
+        try:
+            c_tick=next(self._request_file).replace(',\n','')
+            self._instrument_state=ast.literal_eval(c_tick)
+            return self._instrument_state
+        except:
+            self._request_file.close()
+            self._load_file_()
+            return False
     def _get_tick_price_(self):
         return self._instrument_state['price']
 # --- --- --- TRADE
 class TradeClient:
     def __init__(self, _exchange_instrument):
         self.ei=_exchange_instrument
+        self._reset_()
+    def _reset_(self):
         self._position_overview = None
         self.client_orders = []
     def _close_open_orders_by_prob_(self):
@@ -102,7 +116,7 @@ class TradeClient:
                 self.client_orders[_i]['isOpen'] = False
                 assert(self.client_orders[_i]['price'] is None), "unexpected behaviour when closing orders"
                 self.client_orders[_i]['price']=self.ei.market_instrument._get_tick_price_()
-                logging.info("[order] is now closed : {}, with price : {}".format(\
+                logging.orders_logging("[order] is now closed : {}, with price : {}".format(\
                     self.client_orders[_i]['clientOid'],self.client_orders[_i]['price']))
     def _update_current_orders_state_pnl_(self):
         for _i in range(len(self.client_orders)):
@@ -118,17 +132,19 @@ class TradeClient:
         assert(_dict['symbol']==cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL), "wrong symbol detected on process order (simulation)"
         assert(_dict['size']==1), "unexpected order size" #FIXME allow for different sizes
         if(_dict['side']=='buy'):
-            c_aux=self._get_best_match_order_('sell')
+            c_match_order=self._get_best_match_order_('sell')
         elif(_dict['side']=='sell'):
-            c_aux=self._get_best_match_order_('buy')
+            c_match_order=self._get_best_match_order_('buy')
         else:
             aux_str="order side not undersootd : {}".format(_dict)
             assert(False), aux_str
-        if(c_aux is None):
+        if(c_match_order is None): # user holds no matching inverse order sell->buy, buy->sell
             self.client_orders.append(_dict)
         else:
-            self.client_orders.pop(c_aux[0])
-            self.ei.user_instrument._apply_delta_aviableBalance_(c_aux[1]['orderPnl'])
+            self.client_orders.pop(c_match_order[0])
+            self.ei.user_instrument._apply_delta_aviableBalance_(c_match_order[1]['orderPnl'])
+            sys.stdout.write("{}{}\t\t\t\t\t\t\t\t\t\t\t\t\t\t{}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,c_match_order[1]['orderPnl']))
+            sys.stdout.flush()
         self.ei.user_instrument._update_account_overview_() #FIXME maybe redundant
     def _get_isOpen_(self):
         return any([_o['isOpen'] for _o in self.client_orders])
@@ -279,6 +295,8 @@ class UserClient:
     # }
     def __init__(self, _exchange_instrument):
         self.ei=_exchange_instrument
+        self._reset_()
+    def _reset_(self):
         self.acc_overview_state=cwcn_config.CWCN_SIMULATION_CONFIG.INITIAL_WALLET
     def _apply_delta_commission_(self):
         self.acc_overview_state['availableBalance']+=cwcn_config.CWCN_INSTRUMENT_CONFIG.DELTA_COMMISSION

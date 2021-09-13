@@ -8,7 +8,6 @@ import re
 from matplotlib import pyplot as plt
 # --- --- --- ---
 import os
-import ast
 import logging
 # --- --- --- ---
 import cwcn_config
@@ -18,113 +17,6 @@ import cwcn_tsinuu_piaabo
 import cwcn_kemu_piaabo
 import cwcn_jkimyei_piaabo
 # --- --- --- --- 
-import ray
-from ray import tune
-from ray.tune import CLIReporter
-from ray.tune.schedulers import ASHAScheduler
-from functools import partial
-# --- --- --- ---
-class RAY_ORDER_JKIMYEI: # use pytorch/ray to optimize hyperparameters
-    def __init__(self):
-        # --- --- --- 
-        logging.ray_log("--- RAY system is initialized ----")
-        os.environ.CWCN_CONFIG_SYSTEM='ray_system' #FIXME environ is leakaged
-        self.checkpoint_file=os.path.join(cwcn_config.CWCN_CONFIG().RAY_CHECKPOINTS_FOLDER,"checkpoint")
-        self.__rjk_config=cwcn_config.CWCN_CONFIG().__dict__ #FIXME ray config is not dinamic (sure, and?)
-        self.ray_wikimyei=None
-        # --- --- --- 
-    def _report_(self,_imu):
-        # --- --- --- 
-        tune.report(imu=_imu)
-        # --- --- --- 
-    def _ray_iteration_(self,config):
-        # --- --- --- 
-        logging.ray_log("--- ray step ---")
-        self.ray_wikimyei=cwcn_wikimyei_nebajke.WIKIMYEI(config)
-        self.ray_wikimyei.jkimyei._wikimyei_jkimyei_()
-        c_imu=self.ray_wikimyei._test_wikimyei_on_ahpa_(render_flag=False)
-        self.ray_wikimyei._save_wikimyei_(self.checkpoint_file)
-        self._report_(c_imu) # tune.report(imibajcho=(val_imibajcho / val_steps), accuracy=correct / total)
-        logging.ray_log("--- [REPORT_LEVEL]_:imu:_{}_:config:_{}_:end:_".format(c_imu,self.ray_wikimyei.wk_config))
-        logging.ray_log("--- ray step ended ---")
-        # --- --- --- 
-    def _export_best_trail_(self,result):
-        # --- --- --- 
-        # best_trial = result.get_best_trial("imu", "max", "last")
-        # print("Best trial config: {}".format(best_trial.config))
-        # print("Best trial final validation imu: {}".format(best_trial.last_result["imu"]))
-        # print("Best trial test set imu: {}".format(c_imu))
-        # logging.ray_log("[RESULTS:] \n{} ".format(list(result.results_df.columns.values)))
-        # --- --- --- 
-        # aux_list=result.results_df['imu'].apply(lambda x:x.item())
-        # logging.ray_log("[RESULTS:] \n{} ".format(result.results_df))
-        # logging.ray_log("[BEST  RESULT:] \n{} ".format(result.results_df.iloc[aux_list.tolist().index(max(aux_list))]))
-        # --- --- --- 
-        result.results_df.to_csv("ray_result.csv")
-        # --- --- --- 
-        self._read_ray_logs_()
-        # --- --- --- 
-    def _ray_main_(self,):
-        # --- --- --- 
-        logging.ray_log("--- ray main ---")
-        ray.init()
-        scheduler = ASHAScheduler(
-            metric="imu",
-            mode="max",
-            max_t=0xFFFFFFFF,
-            grace_period=1,
-            reduction_factor=2)
-        reporter = CLIReporter(# parameter_columns=["config in general", "l2", "lr", "batch_size"],
-            metric_columns=["imu", "training_iteration"],
-            parameter_columns=["imu", "training_iteration"],
-            sort_by_metric=True)
-        assert(not torch.cuda.is_available()), "add when cuda is aviable (maybe the only cuda bug, fix next two fixmes and go on)" #FIXME 
-        result = tune.run(
-            self._ray_iteration_,
-            resources_per_trial={"cpu": os.cpu_count(), "gpu": 0}, #FIXME add when cuda is aviable
-            config=self.__rjk_config,
-            num_samples=self.__rjk_config.RAY_N_TRAILS,
-            scheduler=scheduler,
-            progress_reporter=reporter,
-            raise_on_failed_trial=False)
-        # --- --- --- 
-        self._export_best_trail_(result)
-        # --- --- --- 
-        # self.ray_wikimyei=cwcn_wikimyei_nebajke.WIKIMYEI(self.checkpoint_file)
-        # c_imu=self.ray_wikimyei._test_wikimyei_on_ahpa_(render_flag=True)
-        # --- --- --- 
-        logging.ray_log("--- ray main ended ---")
-        ray.shutdown()
-        # --- --- --- 
-    def _read_ray_logs_(self):
-        _logs_info=[]
-        current_log_file=logging.getLoggerClass().root.handlers[1].baseFilename
-        log_folder=os.path.split(current_log_file)[0]
-        for _pth in os.listdir(log_folder):
-            some_file = os.path.join(log_folder,_pth)
-            with open(some_file) as _f:
-                c_log_content=_f.readlines()
-            # c_log_content=c_log_content.split("\n")
-            c_log_content=list(filter(lambda x: "[RAY ]" in x,c_log_content))
-            c_log_content=list(filter(lambda x: "[REPORT_LEVEL]" in x,c_log_content))
-            for _c in c_log_content:
-                aux_info={}
-                aux_info["imu"]=float(re.findall(r"(?<=_:imu:_)(.*)(?=_:config:_)",_c)[0])
-                aux_info["config"]=ast.literal_eval(re.findall(r"(?<=_:config:_)(.*)(?=_:end:_)",_c)[0]) # interesting function
-                _logs_info.append(aux_info)
-        _logs_info=sorted(_logs_info,key=(lambda x: x['imu']), reverse=True)
-        logging.ray_log("[RAY RESULTS REDED FROM LOG,] best trails :")
-        logging.ray_log(" --- --- N°{} --- ---".format(1))
-        cwcn_kemu_piaabo.kemu_pretty_print_object(_logs_info[0])
-        logging.ray_log(" --- --- N°{} --- ---".format(2))
-        cwcn_kemu_piaabo.kemu_pretty_print_object(_logs_info[1])
-        logging.ray_log(" --- --- N°{} --- ---".format(3))
-        cwcn_kemu_piaabo.kemu_pretty_print_object(_logs_info[2])
-        logging.ray_log(" --- --- N°{} --- ---".format(4))
-        cwcn_kemu_piaabo.kemu_pretty_print_object(_logs_info[3])
-        logging.ray_log(" --- --- N°{} --- ---".format(5))
-        cwcn_kemu_piaabo.kemu_pretty_print_object(_logs_info[4])
-        return _logs_info
 # --- --- --- ---
 # Based on https://github.com/higgsfield/RL-Adventure-2/blob/master/3.ppo.ipynb
 # Based on https://github.com/colinskow/move37/tree/master/ppo
@@ -138,7 +30,8 @@ class JKIMYEI_PPO:
         self.munaajpi_imibajcho_fun=torch.nn.MSELoss()
         # --- --- 
         self.ahdo_queue=cwcn_wikimyei_piaabo.AHDO_LOAD_QUEUE() # step profile queue
-        self.hyper_ahdo_profile=cwcn_wikimyei_piaabo.HYPER_PROFILE_QUEUE(_wikimyei.wk_config['HIPER_PROFILE_BUFFER_COUNT']) # load of step profile
+        self.hyper_ahdo_profile=cwcn_jkimyei_piaabo.HYPER_PROFILE_QUEUE(\
+            _wikimyei.wk_config['HIPER_PROFILE_BUFFER_COUNT']) # load of step profile
         self.learning_queue=cwcn_wikimyei_piaabo.LEARNING_LOAD_QUEUE() # load of training profile
         # --- --- 
     def _jkmimyei_gae_(self):
@@ -150,7 +43,7 @@ class JKIMYEI_PPO:
         # --- --- 
         gamma=self.jk_wikimyei.wk_config['TEHDUJCO_GAMMA']
         lam=self.jk_wikimyei.wk_config['TEHDUJCO_GAE_LAMBDA']
-        _, next_value = self.jk_wikimyei.model(self.jk_wikimyei.wk_state.c_alliu)
+        _, next_value, __ = self.jk_wikimyei.model(self.jk_wikimyei.wk_state.c_alliu.unsqueeze(0)) # dist, value, energy
         c_load_dict = self.ahdo_queue._dict_vectorize_queue_()
         c_load_dict['value'].append(next_value)
         gae = 0
@@ -210,7 +103,7 @@ class JKIMYEI_PPO:
                 advantage.requires_grad=True
                 returns.requires_grad=True
                 # --- --- 
-                dist, value=self.jk_wikimyei.model(alliu)
+                dist, value, energy=self.jk_wikimyei.model(alliu) # dist, value, energy
                 # print("[size of sate:] {}, [dist:] {}".format(alliu.shape, dist))
                 entropy=dist.entropy().mean()
                 _, __, new_log_probs,___=self.jk_wikimyei._dist_to_tsane_(dist)
@@ -226,11 +119,11 @@ class JKIMYEI_PPO:
                 jk_profile.uwaabo_imibajcho=torch.clamp(jk_profile.uwaabo_imibajcho,min=self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'],max=self.jk_wikimyei.wk_config['IMIBAJCHO_MAX'])
                 jk_profile.munaajpi_imibajcho=torch.clamp(jk_profile.munaajpi_imibajcho,min=self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'],max=self.jk_wikimyei.wk_config['IMIBAJCHO_MAX'])
                 jk_profile.imibajcho= jk_profile.munaajpi_imibajcho + jk_profile.uwaabo_imibajcho - self.jk_wikimyei.wk_config['TEHDUJCO_ENTROPY_BETA'] * entropy
-                # logging.info("uwaabo_imibajcho: {}, \t munaajpi_imibajcho: {}, \t imibajcho: {}".format(jk_profile.uwaabo_imibajcho.size(),jk_profile.munaajpi_imibajcho.size(),jk_profile.imibajcho.size()))
-                # logging.info("uwaabo_imibajcho: {:.4f}, \t munaajpi_imibajcho: {:.4f}, \t imibajcho: {:.4}".format(jk_profile.uwaabo_imibajcho,jk_profile.munaajpi_imibajcho, jk_profile.imibajcho))
+                # logging.jkimyei_logging("uwaabo_imibajcho: {}, \t munaajpi_imibajcho: {}, \t imibajcho: {}".format(jk_profile.uwaabo_imibajcho.size(),jk_profile.munaajpi_imibajcho.size(),jk_profile.imibajcho.size()))
+                # logging.jkimyei_logging("uwaabo_imibajcho: {:.4f}, \t munaajpi_imibajcho: {:.4f}, \t imibajcho: {:.4}".format(jk_profile.uwaabo_imibajcho,jk_profile.munaajpi_imibajcho, jk_profile.imibajcho))
                 # if(abs(jk_profile.uwaabo_imibajcho)>=min(abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MAX']),abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'])) or abs(jk_profile.munaajpi_imibajcho)>=min(abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MAX']),abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MIN']))):
-                #     logging.info("[jk_profile] : {}".format([(_k,jk_profile.__dict__[_k]) for j_k in jk_profile.__dict__.keys()]))
-                #     logging.info("[jk_profile] : {}".format([(_k,jk_profile.__dict__[_k].shape) for _k in jk_profile.__dict__.keys() if _k not in ['p_trayectory','index','batch_size']]))
+                #     logging.jkimyei_logging("[jk_profile] : {}".format([(_k,jk_profile.__dict__[_k]) for j_k in jk_profile.__dict__.keys()]))
+                #     logging.jkimyei_logging("[jk_profile] : {}".format([(_k,jk_profile.__dict__[_k].shape) for _k in jk_profile.__dict__.keys() if _k not in ['p_trayectory','index','batch_size']]))
                 #     input("STOP...")
                 # --- ---
                 self.optimizer.zero_grad()
@@ -240,11 +133,11 @@ class JKIMYEI_PPO:
                 self.learning_queue._append_(jk_profile,_detach_flag=True)
                 # --- ---
                 count_steps+=1
-    def _wikimyei_jkimyei_(self):
-        # logging.info(" + + + [New jkimyei iteration]")
+    def _jkimyei_wikimyei_(self):
+        # logging.jkimyei_logging(" + + + [New jkimyei iteration]")
         self.learning_queue._reset_queue_()
         self.ahdo_queue._reset_queue_()
-        self.jk_wikimyei._reset_()
+        self.jk_wikimyei._reset_wikimyei_()
         for _ in range(self.jk_wikimyei.wk_config['AHDO_STEPS']):
             # --- ---
             done,ahdo_t=self.jk_wikimyei._wk_step_()
@@ -258,6 +151,8 @@ class JKIMYEI_PPO:
             _total_imu=self.jk_wikimyei.wk_state.accomulated_imu,
             _selec_prob=self.jk_wikimyei.wk_state.accomulated_imu) #FIXME not uniform
         self._jkimyei_ppo_update_()
+        if(cwcn_config.CWCN_CONFIG().ALWAYS_SAVING_MODEL):
+            self.jk_wikimyei._save_wikimyei_(cwcn_config.CWCN_CONFIG().ALWAYS_SAVING_MODEL_PATH)
         # --- --- 
     def _standalone_wikimyei_jkimyei_ppo_loop_(self):
         assert(self.jk_wikimyei.wk_config['AHDO_STEPS']>=self.jk_wikimyei.wk_config['MINI_BATCH_COUNT'])
@@ -266,34 +161,35 @@ class JKIMYEI_PPO:
         self.early_stop = False
         while not self.early_stop:
             train_epoch += 1
+            logging.info("EPOCH : {} --- --- --- --- --- --- --- --- --- --- ".format(train_epoch))
             # --- --- --- TRAIN
-            self._wikimyei_jkimyei_()
+            self._jkimyei_wikimyei_()
             # --- --- --- Eval
             if train_epoch % self.jk_wikimyei.wk_config['VALIDATION_EPOCH'] == 0:
                 test_imu = np.mean([self.jk_wikimyei._test_wikimyei_on_ahpa_(render_flag=False) for _ in range(self.jk_wikimyei.wk_config['NUM_TESTS'])])
-                logging.info('[STAND ALONE: INFO] epoch: %s. imu: %s' % (train_epoch, test_imu))
+                logging.jkimyei_logging('[STAND ALONE: INFO] epoch: %s. imu: %s' % (train_epoch, test_imu))
                 if(cwcn_config.CWCN_OPTIONS.RENDER_FLAG):
                     self.jk_wikimyei._test_wikimyei_on_ahpa_(render_flag=cwcn_config.CWCN_OPTIONS.RENDER_FLAG)
                 if self.best_imu is None or self.best_imu < test_imu:
                     if self.best_imu is not None:
                         name = "%s_best_%+.3f.dat" % (self.jk_wikimyei.wk_config['AHPA_ID'], test_imu)
-                        logging.info("[STAND ALONE: INFO:] Best imu updated: %.3f -> %.3f : %s" % (self.best_imu, test_imu,name))
+                        logging.jkimyei_logging("[STAND ALONE: INFO:] Best imu updated: %.3f -> %.3f : %s" % (self.best_imu, test_imu,name))
                         fname = os.path.join(self.jk_wikimyei.wk_config['CHECKPOINTS_FOLDER'], name)
                         self.jk_wikimyei._save_wikimyei_(fname)
                     self.best_imu = test_imu
                 if test_imu > self.jk_wikimyei.wk_config['BREAK_TRAIN_IMU']:
-                    logging.info("[STAND ALONE: WARNING:] exit jkimyei loop by BREAK_TRAIN_IMU")
+                    logging.jkimyei_logging("[STAND ALONE: WARNING:] exit jkimyei loop by BREAK_TRAIN_IMU")
                     self.early_stop = True
-            if(cwcn_config.CWCN_OPTIONS.PLOT_FLAG):
-                self.ahdo_queue._plot_itm_('imu')
+            if(cwcn_config.CWCN_OPTIONS.PLOT_FLAG and train_epoch%cwcn_config.CWCN_OPTIONS.PLOT_INTERVAL==0):#
+                # self.ahdo_queue._plot_itm_('imu')
+                self.ahdo_queue._plot_itm_('imu,returns,value,alliu:0')
                 # self.ahdo_queue._plot_itm_('action,imu,alliu')
-                self.learning_queue._plot_itm_('munaajpi_imibajcho,uwaabo_imibajcho')
-                # self.learning_queue._plot_itm_('ratio,surr1,surr2')
-                # self.ahdo_queue._plot_itm_('returns,advantage,gae,delta')
-                self.ahdo_queue._plot_itm_('returns,value')
+                # self.learning_queue._plot_itm_('munaajpi_imibajcho,uwaabo_imibajcho')
+                # # self.learning_queue._plot_itm_('ratio,surr1,surr2')
+                # # self.ahdo_queue._plot_itm_('returns,advantage,gae,delta')
                 plt.show()
             if(train_epoch > self.jk_wikimyei.wk_config['BREAK_TRAIN_EPOCH']):
-                logging.info("[STAND ALONE: WARNING:] exit jkimyei loop by BREAK_TRAIN_EPOCH")
+                logging.jkimyei_logging("[STAND ALONE: WARNING:] exit jkimyei loop by BREAK_TRAIN_EPOCH")
                 self.early_stop = True
         if(cwcn_config.CWCN_OPTIONS.RENDER_FLAG):
             self.jk_wikimyei._test_wikimyei_on_ahpa_(render_flag=cwcn_config.CWCN_OPTIONS.RENDER_FLAG)
