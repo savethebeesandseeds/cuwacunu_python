@@ -2,7 +2,7 @@
 # close_all_positions.py
 # --- --- ---  
 import sys
-sys.path.append('../kijtyu')
+sys.path.append('../communications')
 import poloniex_api
 import logging
 import json

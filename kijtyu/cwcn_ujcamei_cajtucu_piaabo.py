@@ -27,7 +27,6 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
                 cwcn_config.TRAIN_ON_FORECAST and cwcn_config.PAPER_INSTRUMENT, 
                 '' if cwcn_config.PAPER_INSTRUMENT else ', EXCHANGE : {}'.format(cwcn_config.CWCN_INSTRUMENT_CONFIG.EXCHANGE)))
         self.sequence_size = cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_ALLIU_SEQUENCE_SIZE
-        self.new_tick_aviable_on_queue = False
         self.uc=_ujcamei_cajtucu
         self.uc_duuruva={}
         for _c_duur in cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_ACTIVE_BAO:
@@ -39,6 +38,8 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
                 assert(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_BAO[_c_duur]=='not'), str_aux
         self.alliu_sequence_tensor=torch.zeros((self.sequence_size,cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.ALLIU_COUNT)).to(cwcn_config.device)
         self.instrument_queue=[]
+        if(not cwcn_config.PAPER_INSTRUMENT):
+            self.new_tick_aviable_on_queue = asyncio.Event()
         if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
             self._forecast_non_uwaabo=None
         # --- --- --- --- 
@@ -103,26 +104,25 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
         _actual_tk_dict['size']=int(_actual_tk_dict['size'])
         _actual_tk_dict['ts']=int(_actual_tk_dict['ts'])
         # --- --- --- 
-        if(self.new_tick_aviable_on_queue==True): # ticked arrived too fast for prossesing unit; accomulating tick
-            logging.error("Not expected behaviour; double update or error state, inconclusive (appending method need to be FIX!)")
-            # # if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
-            # #     c_index=0
-            # # else:
-            # #     c_index=-1
-            # # self.instrument_queue[c_index]['price']=_actual_tk_dict['price']
-            # # self.instrument_queue[c_index]['size']+=_actual_tk_dict['size'] #FIXME this is incorrect
-            # # self.instrument_queue[c_index]['side']=_actual_tk_dict['side']
-            # # self.instrument_queue[c_index]['ts']=_actual_tk_dict['ts']
-            # # self.instrument_queue[c_index]['currentQty']=self.uc._uc_position_.currentQty
-        # # if(len(self.instrument_queue)!=0):
-        # #     if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
-        # #         self._past_tk_dict=self.instrument_queue[0]
-        # #     else:
-        # #         self._past_tk_dict=self.instrument_queue[-1]
-        # # else:
-        # #     self._past_tk_dict=copy.deepcopy(_actual_tk_dict)
+        # if(self.new_tick_aviable_on_queue==True): # ticked arrived too fast for prossesing unit; accomulating tick
+        #     logging.error("Not expected behaviour; double update or error state, inconclusive (appending method need to be FIX!)")
+        #     # # if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
+        #     # #     c_index=0
+        #     # # else:
+        #     # #     c_index=-1
+        #     # # self.instrument_queue[c_index]['price']=_actual_tk_dict['price']
+        #     # # self.instrument_queue[c_index]['size']+=_actual_tk_dict['size'] #FIXME this is incorrect
+        #     # # self.instrument_queue[c_index]['side']=_actual_tk_dict['side']
+        #     # # self.instrument_queue[c_index]['ts']=_actual_tk_dict['ts']
+        #     # # self.instrument_queue[c_index]['currentQty']=self.uc._uc_position_.currentQty
+        # # # if(len(self.instrument_queue)!=0):
+        # # #     if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
+        # # #         self._past_tk_dict=self.instrument_queue[0]
+        # # #     else:
+        # # #         self._past_tk_dict=self.instrument_queue[-1]
+        # # # else:
+        # # #     self._past_tk_dict=copy.deepcopy(_actual_tk_dict)
         # --- --- --- GET PAST DICT
-        self.new_tick_aviable_on_queue=True
         if(self._past_tk_dict is None):
             self._past_tk_dict=copy.deepcopy(_actual_tk_dict)
         # --- --- --- --- --- --- --- --- --- --- --- --- good stuff
@@ -174,7 +174,8 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
         self._past_tk_dict=copy.deepcopy(_actual_tk_dict)
         # --- --- ---
         self.uc._step_flgs['instrument_updated']=True
-        self.new_tick_aviable_on_queue=False
+        if(not cwcn_config.PAPER_INSTRUMENT):
+            self.new_tick_aviable_on_queue.set()
         # --- --- --- 
     def _get_alliu_(self):
         return self.alliu_sequence_tensor
@@ -243,9 +244,9 @@ class UJCAMEI_CAJTUCU_POSITION:
         if(_dict is None):
             _dict=self.uc._echange_instrument.trade_instrument.get_position_details(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
         logging.ujcamei_logging("[update position] results in : {}".format(_dict))
-        self.realisedPnl    = _dict['realisedPnl']
-        self.unrealisedPnl  = _dict['unrealisedPnl']
-        self.currentQty     = _dict['currentQty']
+        self.realisedPnl    = float(_dict['realisedPnl'])
+        self.unrealisedPnl  = float(_dict['unrealisedPnl'])
+        self.currentQty     = float(_dict['currentQty'])
         self.isOpen         = _dict['isOpen']
         # --- --- --- 
         self.uc._step_flgs['position_updated']=True
@@ -281,13 +282,19 @@ class UJCAMEI_CAJTUCU_WALLET:
     def _update_wallet_(self,_dict=None):
         if(_dict is None and not cwcn_config.PAPER_INSTRUMENT):
             _dict=self.uc._echange_instrument.user_instrument.get_account_overview()
+        # print("dict::: {}".format(_dict))
         logging.ujcamei_logging("[UPDATE WALLET] {}".format(_dict))
         uc_dict_keys = list(self.__dict__.keys())
         for _k in list(_dict.keys()):
             if(_k == 'currency' and _dict[_k]!=cwcn_config.CWCN_INSTRUMENT_CONFIG.CURRENCY):
                 logging.error("[MAYOR WARNING!] wrong currency detected on ujcamei-cajtucu wallet update {}".format(_dict)) #FIXME, close all orders on error
+            if(_k in ['currency']):
+                self.__dict__[_k]=str(_dict[_k])
             elif(_k in uc_dict_keys):
-                self.__dict__[_k]=_dict[_k]
+                try:
+                    self.__dict__[_k]=float(_dict[_k])
+                except:
+                    self.__dict__[_k]=float(_dict[_k.replace('Pnl','PNL')])
         self.uc._step_flgs['wallet_been_updated']=True
         for _k in list(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.WALLET_UPDATE_METHODS.keys()):
             cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.WALLET_UPDATE_METHODS[_k](self)
@@ -329,7 +336,6 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
             'reward_given':False,
         }
     def _ujcamei_raise_(self, msg, aux_msg=None):
-        self._uc_instrumet_.new_tick_aviable_on_queue=False
         logging.warning("[UJCAMEI] found unrecognized message comming from websocket : {} - {}".format(msg, aux_msg if aux_msg is not None else '')) #FIXME, close all orders on error
     def _ujcamei_(self,msg):
         # --- --- --- --- 
@@ -416,6 +422,40 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
                 else:
                     self._ujcamei_raise_(msg, '[unregocnized wallet update]')
             # --- --- --- --- 
+            elif('topic' in list(msg.keys()) and '/contract/position' in msg['topic']):
+                if('subject' in list(msg.keys()) and msg['subject'] in ['position.change']):
+                    # {'data': {'realisedGrossPnl': 0.0, 'symbol': 'BTCUSDTPERP', 'crossMode': False, 'liquidationPrice': 48066.0, 'posLoss': 0.0, 'avgEntryPrice': 48283.0, 'unrealisedPnl': -0.00656, 'markPrice': 48276.44, 'posMargin': 0.51940437, 'autoDeposit': False, 'riskLimit': 2000000, 'unrealisedCost': 48.283, 'posComm': 0.03657437, 'posMaint': 0.30213087, 'posCost': 48.283, 'maintMarginReq': 0.0055, 'bankruptPrice': 47800.0, 'realisedCost': 0.03621225, 'markValue': 48.27644, 'posInit': 0.48283, 'realisedPnl': -0.03621225, 'maintMargin': 0.51284437, 'realLeverage': 101.3773699792, 'currentCost': 48.283, 'settleCurrency': 'USDT', 'currentQty': 1, 'delevPercentage': 0.0, 'currentComm': 0.03621225, 'realisedGrossCost': 0.0, 'isOpen': True, 'posCross': 0.0, 'currentTimestamp': 1631771576299, 'unrealisedRoePcnt': -0.0136, 'unrealisedPnlPcnt': -0.0001}, 'subject': 'position.change', 'topic': '/contract/position:BTCUSDTPERP', 'channelType': 'private', 'type': 'message', 'userId': '11002642'}
+                    pass
+            elif('topic' in list(msg.keys()) and '/contractMarket/user' in msg['topic']):
+                if('subject' in list(msg.keys()) and msg['subject'] in ['user']):
+                    # {'data': {'symbol': 'BTCUSDTPERP', 'reason': 'done', 'sequence': 1597137866863, 'orderId': '6142dbb8f2a0ff00063e0ad3', 'type': 'done', 'userId': '11002642', 'ts': 1631771564096944807}, 'subject': 'user', 'topic': '/contractMarket/user:BTCUSDTPERP', 'channelType': 'private', 'type': 'message', 'userId': '11002642'} 
+                    pass
+            elif('topic' in list(msg.keys()) and '/contractMarket/tradeOrders' in msg['topic']):
+                if('subject' in list(msg.keys()) and msg['subject'] in ['orderChange']):
+                    # {
+                    #     'data': {'symbol': 'BTCUSDTPERP', 
+                    #     'orderType': 'market', 
+                    #     'side': 'buy', 
+                    #     'canceledSize': '0', 
+                    #     'orderId': '6142dbb8f2a0ff00063e0ad3', 
+                    #     'liquidity': 'taker', 
+                    #     'type': 'match', 
+                    #     'orderTime': 1631771576220531786, 'size': '1', 
+                    #     'filledSize': '1', 
+                    #     'matchPrice': '48283', 
+                    #     'matchSize': '1', 
+                    #     'tradeId': '6142dbb8d49eb222ee2f1354', 
+                    #     'remainSize': '0', 
+                    #     'clientOid': 'c7a9bd18-5dae-45a1-9faa-e5d3aad803b5', 
+                    #     'status': 'match', 
+                    #     'ts': 1631771564096944807}, 
+                    #     'subject': 'orderChange', 
+                    #     'topic': '/contractMarket/tradeOrders', 
+                    #     'channelType': 'private', 
+                    #     'type': 'message', 
+                    #     'userId': '11002642'
+                    # }
+                    pass 
             # # # elif('/contractMarket/execution' in msg['topic']): # not in use, find why is not redudant to ticker
             # # #     if(msg['subject'] in ['match']):
             # # #         # {
@@ -509,6 +549,10 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
         try:
             if(not self._step_flgs['wallet_been_updated']):
                 logging.error("update wallet before getting reward")
+            if(self._uc_wallet_.pastUnrealisedPnl is None):
+                self._uc_wallet_.pastUnrealisedPnl=self._uc_wallet_.unrealisedPnl
+            if(self._uc_wallet_.pastAvailableBalance is None):
+                self._uc_wallet_.pastAvailableBalance=self._uc_wallet_.availableBalance
             # return self._uc_wallet_.availableBalance * _certainty.std() #self._uc_wallet_.realisedPnl+
             rward=self._uc_wallet_.availableBalance-self._uc_wallet_.pastAvailableBalance\
                 +0.6*(self._uc_wallet_.unrealisedPnl-self._uc_wallet_.pastUnrealisedPnl)
@@ -548,8 +592,10 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
                 logging.warning("RESETING DATA ADQUISITION, RESTARTING FILE ITERATION")
                 self._uc_instrumet_._load_instrument_representation_()
         else:
-            while(not self._uc_instrumet_.new_tick_aviable_on_queue):
-                self._echange_instrument_loop.run_until_complete(asyncio.sleep(0.05))
+            async def waiter():
+                await self._uc_instrumet_.new_tick_aviable_on_queue.wait()
+            self._echange_instrument_loop.run_until_complete(waiter())
+            self._uc_instrumet_.new_tick_aviable_on_queue.clear()
             # sys.stdout.write("··· waiting for tick ···")
             # sys.stdout.write(cwcn_config.CWCN_CURSOR.CARRIER_RETURN)
             # sys.stdout.write(cwcn_config.CWCN_CURSOR.CLEAR_LINE)
@@ -562,6 +608,11 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
         self._reset_step_flags_()
         self._take_action_(_tsane=_tsane, _certainty=_certainty)
         self._wait_for_step_()
+        # --- 
+        self._uc_instrumet_._update_instrument_()
+        self._uc_position_._update_position_()
+        self._uc_wallet_._update_wallet_()
+        self._uc_instrumet_._instrument_queue_healt_()
         # --- 
         self.c_alliu=self._get_alliu_()
         self.c_done=self._get_if_is_done_()
