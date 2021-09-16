@@ -189,13 +189,13 @@ class TradeClient:
         for _o in self.client_orders:
             c_qty+=+_o['size'] if _o['side']=='buy' else -_o['size'] if _o['side']=='sell' else 0
         return c_qty
-    def _get_realizedPnl_(self):
-        return self.ei.user_instrument.acc_overview_state['realizedPnl']
-    def _get_unrealizedPnl_(self):
-        c_unrealizedPnl=0.0
+    def _get_realisedPnl_(self):
+        return self.ei.user_instrument.acc_overview_state['realisedPnl']
+    def _get_unrealisedPnl_(self):
+        c_unrealisedPnl=0.0
         for _o in self.client_orders:
-            c_unrealizedPnl+=_o['orderPnl']
-        return c_unrealizedPnl
+            c_unrealisedPnl+=_o['orderPnl']
+        return c_unrealisedPnl
     def get_position_details(self, symbol):
         """
         Get the position details of a specified position."""
@@ -228,9 +228,9 @@ class TradeClient:
         #     "posMaint": 0.00001724,                          //Maintenance margin
         #     "maintMargin": 0.00252516,                       //Position margin
         #     "realizedGrossPnl": 0,                           //Accumulated realized gross profit value
-        #     "realizedPnl": -0.00000253,                      //Realised profit and loss
-        #     "unrealizedPnl": -0.00014264,                    //Unrealized profit and loss
-        #     "unrealizedPnlPcnt": -0.0535,                    //Profit-loss ratio of the position
+        #     "realisedPnl": -0.00000253,                      //Realised profit and loss
+        #     "unrealisedPnl": -0.00014264,                    //Unrealized profit and loss
+        #     "unrealisedPnlPcnt": -0.0535,                    //Profit-loss ratio of the position
         #     "unrealizedRoePcnt": -0.0535,                    //Rate of return on investment
         #     "avgEntryPrice": 7508.22,                        //Average entry price
         #     "liquidationPrice": 1000000,                     //Liquidation price
@@ -243,8 +243,8 @@ class TradeClient:
             "symbol":symbol,
             "isOpen":self._get_isOpen_(),
             "currentQty":self._get_currentQty_(),
-            "realizedPnl":self._get_realizedPnl_(),
-            "unrealizedPnl":self._get_unrealizedPnl_(),
+            "realisedPnl":self._get_realisedPnl_(),
+            "unrealisedPnl":self._get_unrealisedPnl_(),
         }
         return self._position_overview
 
@@ -329,7 +329,7 @@ class TradeClient:
 class UserClient:
     # "data": {
     #     "accountEquity": 99.8999305281, //Account equity = marginBalance + Unrealized Pnl 
-    #     "unrealizedPnl": 0, //Unrealized profit and loss
+    #     "unrealisedPnl": 0, //Unrealized profit and loss
     #     "marginBalance": 99.8999305281, //Margin balance = positionMargin + orderMargin + frozenFunds + availableBalance
     #     "positionMargin": 0, //Position margin
     #     "orderMargin": 0, //Order margin
@@ -345,15 +345,15 @@ class UserClient:
     def _apply_delta_commission_(self):
         self.acc_overview_state['availableBalance']+=cwcn_config.CWCN_INSTRUMENT_CONFIG.DELTA_COMMISSION
     def _apply_delta_aviableBalance_(self,_delta):
-        self.acc_overview_state['realizedPnl']+=_delta
+        self.acc_overview_state['realisedPnl']+=_delta
         self.acc_overview_state['availableBalance']+=_delta
-    def _update_account_unrealizedPnl_(self):
-        self.acc_overview_state['unrealizedPnl']=0.0
+    def _update_account_unrealisedPnl_(self):
+        self.acc_overview_state['unrealisedPnl']=0.0
         for _o in self.ei.trade_instrument.client_orders:
-            self.acc_overview_state['unrealizedPnl']+=_o['orderPnl']
+            self.acc_overview_state['unrealisedPnl']+=_o['orderPnl']
     def _update_account_overview_(self,_dict={}):
         self.acc_overview_state.update(_dict)
-        self._update_account_unrealizedPnl_()
+        self._update_account_unrealisedPnl_()
         self.acc_overview_state['marginBalance']=\
             self.acc_overview_state['positionMargin']+\
             self.acc_overview_state['orderMargin']+\
@@ -361,7 +361,7 @@ class UserClient:
             self.acc_overview_state['availableBalance']
         self.acc_overview_state['accountEquity']=\
             self.acc_overview_state['marginBalance']+\
-            self.acc_overview_state['unrealizedPnl']
+            self.acc_overview_state['unrealisedPnl']
         # --- --- --- 
         # --- --- --- 
     def get_account_overview(self, **kwargs):

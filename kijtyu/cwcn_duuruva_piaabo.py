@@ -13,8 +13,9 @@ import matplotlib.ticker as mticker
 import cwcn_config
 # --- --- ---
 class DUURUVA:
-    def __init__(self,_duuruva_vector_size : int,_wrapper_duuruva_std_or_norm : bool=False, _d_name : str=None):
+    def __init__(self,_duuruva_vector_size : int,_wrapper_duuruva_normalize, _d_name : str=None):
         self._d_name=_d_name
+        self._wrapper_duuruva_std_or_norm=_wrapper_duuruva_normalize
         self._duuruva_cosas = [
             'value',
             'max',
@@ -28,7 +29,6 @@ class DUURUVA:
             'skewness',
         ]
         self._duuruva_vector_size=_duuruva_vector_size
-        self._wrapper_duuruva_std_or_norm=_wrapper_duuruva_std_or_norm
         self._reset_duuruva_()
         self._plot_instruction = cwcn_config.CWCN_DUURUVA_CONFIG.PLOT_LEVEL
         self._plot_holder = dict([(_dc,[]) for _dc in self._duuruva_cosas])

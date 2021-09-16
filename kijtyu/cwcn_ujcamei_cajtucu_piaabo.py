@@ -21,29 +21,29 @@ assert(cwcn_config.CWCN_INSTRUMENT_CONFIG.EXCHANGE=='POLONIEX'), "unrecognized e
 # --- ---
 class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
     def __init__(self, _ujcamei_cajtucu):
+        logging.info("Stating ujcamei :: PAPER: {}, SYMBOL: {}, FORECAST: {}{}".format(\
+            cwcn_config.PAPER_INSTRUMENT, 
+                cwcn_config.SYMBOL_INSTRUMENT, 
+                cwcn_config.TRAIN_ON_FORECAST and cwcn_config.PAPER_INSTRUMENT, 
+                '' if cwcn_config.PAPER_INSTRUMENT else ', EXCHANGE : {}'.format(cwcn_config.CWCN_INSTRUMENT_CONFIG.EXCHANGE)))
         self.sequence_size = cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_ALLIU_SEQUENCE_SIZE
         self.new_tick_aviable_on_queue = False
         self.uc=_ujcamei_cajtucu
-        self.price_duuruva=cwcn_duuruva_piaabo.DUURUVA(_duuruva_vector_size=0x01, _d_name='price_duuruva'.upper(),
-            _standar_or_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.STD_OR_NORM_BAO['price'],
-            _wrapper_duuruva_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.NORMALIZE_ALLIU_PRICE)
-        self.size_duuruva=cwcn_duuruva_piaabo.DUURUVA(_duuruva_vector_size=0x01, _d_name='size_duuruva'.upper(),
-            _standar_or_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.STD_OR_NORM_BAO['size'],
-            _wrapper_duuruva_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.NORMALIZE_ALLIU_SIZE) #Z
-        self.side_duuruva=cwcn_duuruva_piaabo.DUURUVA(_duuruva_vector_size=0x01, _d_name='side_duuruva'.upper(),
-            _standar_or_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.STD_OR_NORM_BAO['side'],
-            _wrapper_duuruva_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.NORMALIZE_ALLIU_SIDE) #D
-        self.price_delta_duuruva=cwcn_duuruva_piaabo.DUURUVA(_duuruva_vector_size=0x01, _d_name='price_delta_duuruva'.upper(),
-            _standar_or_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.STD_OR_NORM_BAO['price_delta'],
-            _wrapper_duuruva_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.NORMALIZE_ALLIU_PRICE_DELTA)
-        self.time_delta_duuruva=cwcn_duuruva_piaabo.DUURUVA(_duuruva_vector_size=0x01, _d_name='time_delta_duuruva'.upper(),
-            _standar_or_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.STD_OR_NORM_BAO['time_delta'],
-            _wrapper_duuruva_normalize=cwcn_config.CWCN_DUURUVA_CONFIG.NORMALIZE_ALLIU_TIME_DELTA)
+        self.uc_duuruva={}
+        for _c_duur in cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_ACTIVE_BAO:
+            if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_BAO[_c_duur]):
+                self.uc_duuruva[_c_duur]=cwcn_duuruva_piaabo.DUURUVA(_duuruva_vector_size=0x01, _d_name=_c_duur.upper(),
+                    _wrapper_duuruva_normalize=cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_BAO[_c_duur])
+            else:
+                str_aux="wrong configuration for DUURUVA in UJCAMEI_CAJTUCU initialization, configure CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_BAO[{}.std_or_norm]=='not' or enable CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_BAO[{}.compute_flag].".format(_c_duur,_c_duur)
+                assert(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_BAO[_c_duur]=='not'), str_aux
         self.alliu_sequence_tensor=torch.zeros((self.sequence_size,cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.ALLIU_COUNT)).to(cwcn_config.device)
         self.instrument_queue=[]
         if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
             self._forecast_non_uwaabo=None
-        self._price=None
+        # --- --- --- --- 
+        self._past_tk_dict=None #FIXME does not hold a method to reset it
+        self._price=None #FIXME does not hold a method to reset it #FIXME (used?)
     def _c_instrument_state_(self):
         if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
             return self.instrument_queue[0]
@@ -64,11 +64,13 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
         if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
             aux_ts=0xFFFFFFFFFFFFFFFF
             for _iq in self.instrument_queue:
-                _healt_flag&=_iq['ts']<aux_ts
+                if('ts' in list(_iq.keys())):
+                    _healt_flag&=_iq['ts']<aux_ts
         else:
             aux_ts=0x00
             for _iq in self.instrument_queue:
-                _healt_flag&=_iq['ts']>aux_ts
+                if('ts' in list(_iq.keys())):
+                    _healt_flag&=_iq['ts']>aux_ts
         if(not _healt_flag):
             logging.error("[HEALT] Unhealty load detected for UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION")
         self.uc._step_flgs['healt_checked']=True
@@ -92,14 +94,14 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
             c_ctx+=1
             logging.info("wait for queue to load : {}/{}".format(c_ctx,c_max_count))
             self.uc._wait_for_step_()
-    def _update_instrument_(self,_tk_dict=None):
-        if(_tk_dict is None and not cwcn_config.PAPER_INSTRUMENT):
-            _tk_dict=self.uc._echange_instrument.market_instrument.get_ticker(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
+    def _update_instrument_(self,_actual_tk_dict=None):
+        if(_actual_tk_dict is None and not cwcn_config.PAPER_INSTRUMENT):
+            _actual_tk_dict=self.uc._echange_instrument.market_instrument.get_ticker(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
         # logging.info("_update_instrument_")
         # --- --- --- CAST
-        _tk_dict['price']=float(_tk_dict['price'])
-        _tk_dict['size']=int(_tk_dict['size'])
-        _tk_dict['ts']=int(_tk_dict['ts'])
+        _actual_tk_dict['price']=float(_actual_tk_dict['price'])
+        _actual_tk_dict['size']=int(_actual_tk_dict['size'])
+        _actual_tk_dict['ts']=int(_actual_tk_dict['ts'])
         # --- --- --- 
         if(self.new_tick_aviable_on_queue==True): # ticked arrived too fast for prossesing unit; accomulating tick
             logging.error("Not expected behaviour; double update or error state, inconclusive (appending method need to be FIX!)")
@@ -107,28 +109,31 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
             # #     c_index=0
             # # else:
             # #     c_index=-1
-            # # self.instrument_queue[c_index]['price']=_tk_dict['price']
-            # # self.instrument_queue[c_index]['size']+=_tk_dict['size'] #FIXME this is incorrect
-            # # self.instrument_queue[c_index]['side']=_tk_dict['side']
-            # # self.instrument_queue[c_index]['ts']=_tk_dict['ts']
+            # # self.instrument_queue[c_index]['price']=_actual_tk_dict['price']
+            # # self.instrument_queue[c_index]['size']+=_actual_tk_dict['size'] #FIXME this is incorrect
+            # # self.instrument_queue[c_index]['side']=_actual_tk_dict['side']
+            # # self.instrument_queue[c_index]['ts']=_actual_tk_dict['ts']
             # # self.instrument_queue[c_index]['currentQty']=self.uc._uc_position_.currentQty
+        # # if(len(self.instrument_queue)!=0):
+        # #     if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
+        # #         self._past_tk_dict=self.instrument_queue[0]
+        # #     else:
+        # #         self._past_tk_dict=self.instrument_queue[-1]
+        # # else:
+        # #     self._past_tk_dict=copy.deepcopy(_actual_tk_dict)
+        # --- --- --- GET PAST DICT
         self.new_tick_aviable_on_queue=True
-        if(len(self.instrument_queue)!=0):
-            if(cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.TIME_DECREMENTAL_SEQUENCE):
-                _past_tk_dict=self.instrument_queue[0]
-            else:
-                _past_tk_dict=self.instrument_queue[-1]
-        else:
-            _past_tk_dict=copy.deepcopy(_tk_dict)
+        if(self._past_tk_dict is None):
+            self._past_tk_dict=copy.deepcopy(_actual_tk_dict)
         # --- --- --- --- --- --- --- --- --- --- --- --- good stuff
         # --- --- --- INTRUMENT QUEUE
         _temp_tk_dict=dict(
-            [ cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_BAO[_](
+            [ (_,cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_BAO[_](
                 pos=self.uc._uc_position_, 
-                wal=self.uc._uc_wallet, 
-                tk_dict=_tk_dict, 
-                past_tk_dict=_past_tk_dict, 
-                ) for _ in cwcn_config.cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_ACTIVE_BAO
+                wal=self.uc._uc_wallet_, 
+                tk_dict=_actual_tk_dict, 
+                past_tk_dict=self._past_tk_dict, 
+                )) for _ in cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_ACTIVE_BAO
             ]
         )
         # --- --- --- 
@@ -141,25 +146,21 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
         # --- --- --- --- --- --- --- --- --- --- --- 
         # --- --- --- INSTRUMENT TENSORIZATION
         # #FIXME make it stable, for now it does not detect batches not needs it never ever.
-        _temp_tk_dict={
-            'price':torch.Tensor([_temp_tk_dict['price']]).squeeze(0).to(cwcn_config.device),
-            'size':torch.Tensor([_temp_tk_dict['size']]).squeeze(0).to(cwcn_config.device),
-            'side':torch.Tensor([-1 if _temp_tk_dict['side']=='sell' else +1 if _temp_tk_dict['side']=='buy' else 0]).squeeze(0).to(cwcn_config.device),
-            'time_delta':torch.Tensor([_temp_tk_dict['ts']-_past_tk_dict['ts']]).squeeze(0).to(cwcn_config.device),
-            'price_delta':torch.Tensor([_temp_tk_dict['price']-_past_tk_dict['price']]).squeeze(0).to(cwcn_config.device),
-            'currentQty':torch.Tensor([_temp_tk_dict['currentQty']]).squeeze(0).to(cwcn_config.device),
-        }
+        _temp_tk_dict=dict(
+            [ ('{}'.format(_),cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_BAO['{}.tensor'.format(_)](
+                tk_dict=_temp_tk_dict, 
+                ).to(cwcn_config.device)) for _ in cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_ACTIVE_BAO
+            ]
+        )
         # --- --- --- INSTRUMENT DUURUVA
-        _temp_tk_dict={
-            'price':self.price_duuruva._duuruva_value_wrapper_(_temp_tk_dict['price']),
-            'size':self.size_duuruva._duuruva_value_wrapper_(_temp_tk_dict['size']),
-            'side':self.side_duuruva._duuruva_value_wrapper_(_temp_tk_dict['side']),
-            'time_delta':self.time_delta_duuruva._duuruva_value_wrapper_(_temp_tk_dict['time_delta']),
-            'price_delta':self.price_delta_duuruva._duuruva_value_wrapper_(_temp_tk_dict['price_delta']),
-            'currentQty':_temp_tk_dict['currentQty'],
-        }
+        _temp_tk_dict=dict(
+            [ ('{}'.format(_),self.uc_duuruva[_]._duuruva_value_wrapper_(_temp_tk_dict[_])
+            ) for _ in cwcn_config.CWCN_UJCAMEI_CAJTUCU_CONFIG.UJCAMEI_ACTIVE_BAO
+            ]
+        )
         if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
-            self._forecast_non_uwaabo=torch.Tensor([_tk_dict['forecast_non_uwaabo']]).squeeze(0).to(cwcn_config.device)/torch.sqrt(self.price_delta_duuruva._duuruva[0]['variance']+ cwcn_config.CWCN_DUURUVA_CONFIG.MIN_STD)
+            #FIXME make it configurable, dorecast_non_uwaabo is stdarized, but cannot be configured not is tested to be the best choise
+            self._forecast_non_uwaabo=torch.Tensor([_actual_tk_dict['forecast_non_uwaabo']]).squeeze(0).to(cwcn_config.device)/torch.sqrt(self.uc_duuruva['price_delta']._duuruva[0]['variance']+ cwcn_config.CWCN_DUURUVA_CONFIG.MIN_STD)
         self._price=_temp_tk_dict['price'] 
         # --- --- --- 
         self._instrument_queue_healt_()
@@ -169,8 +170,12 @@ class UJCAMEI_CAJTUCU_INSTRUMENT_REPRESENTATION:
             _temp_tk_dict[_k] for _k in list(_temp_tk_dict.keys())
         ]).to(cwcn_config.device)
         self._update_alliu_sequence_(c_tensor)
-        self.new_tick_aviable_on_queue=False
+        # --- --- --- --- ---  
+        self._past_tk_dict=copy.deepcopy(_actual_tk_dict)
+        # --- --- ---
         self.uc._step_flgs['instrument_updated']=True
+        self.new_tick_aviable_on_queue=False
+        # --- --- --- 
     def _get_alliu_(self):
         return self.alliu_sequence_tensor
 # --- --- --- --- --- --- 
@@ -187,8 +192,8 @@ class UJCAMEI_CAJTUCU_POSITION:
         # self.position_size = None #FIXME not used; count, signed -sell and +buy
         self._reset_position_()
     def _reset_position_(self):
-        self.realizedPnl = None
-        self.unrealizedPnl = None
+        self.realisedPnl = None
+        self.unrealisedPnl = None
         self.currentQty = None
         self.isOpen = None
         self.realizedCost = None
@@ -224,9 +229,9 @@ class UJCAMEI_CAJTUCU_POSITION:
         # #     "posMaint": 0.00001724,//Maintenance margin
         # #     "maintMargin": 0.00252516,//Position margin
         # #     "realizedGrossPnl": 0,//Accumulated realized gross profit value
-        # #     "realizedPnl": -0.00000253,//Realised profit and loss
-        # #     "unrealizedPnl": -0.00014264,//Unrealized profit and loss
-        # #     "unrealizedPnlPcnt": -0.0535,//Profit-loss ratio of the position
+        # #     "realisedPnl": -0.00000253,//Realised profit and loss
+        # #     "unrealisedPnl": -0.00014264,//Unrealized profit and loss
+        # #     "unrealisedPnlPcnt": -0.0535,//Profit-loss ratio of the position
         # #     "unrealizedRoePcnt": -0.0535,//Rate of return on investment
         # #     "avgEntryPrice": 7508.22,//Average entry price
         # #     "liquidationPrice": 1000000,//Liquidation price
@@ -238,8 +243,8 @@ class UJCAMEI_CAJTUCU_POSITION:
         if(_dict is None):
             _dict=self.uc._echange_instrument.trade_instrument.get_position_details(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
         logging.ujcamei_logging("[update position] results in : {}".format(_dict))
-        self.realizedPnl    = _dict['realizedPnl']
-        self.unrealizedPnl  = _dict['unrealizedPnl']
+        self.realisedPnl    = _dict['realisedPnl']
+        self.unrealisedPnl  = _dict['unrealisedPnl']
         self.currentQty     = _dict['currentQty']
         self.isOpen         = _dict['isOpen']
         # --- --- --- 
@@ -257,21 +262,21 @@ class UJCAMEI_CAJTUCU_WALLET:
         self.orderMargin=None
         self.availableBalance=None
         self.pastAvailableBalance=None
-        self.realizedPnl=None
-        self.unrealizedPnl=None
-        self.pastUnrealizedPnl=None
+        self.realisedPnl=None
+        self.unrealisedPnl=None
+        self.pastUnrealisedPnl=None
         self._reset_wallet_()
     def _reset_wallet_(self):
         if(cwcn_config.PAPER_INSTRUMENT):
             self.currency = cwcn_config.CWCN_SIMULATION_CONFIG.INITIAL_WALLET['currency']
             self.orderMargin = None
             self.availableBalance = cwcn_config.CWCN_SIMULATION_CONFIG.INITIAL_WALLET['availableBalance']
-            self.realizedPnl = cwcn_config.CWCN_SIMULATION_CONFIG.INITIAL_WALLET['realizedPnl'] #FIXME not used
-            self.unrealizedPnl = cwcn_config.CWCN_SIMULATION_CONFIG.INITIAL_WALLET['unrealizedPnl'] #FIXME not used
+            self.realisedPnl = cwcn_config.CWCN_SIMULATION_CONFIG.INITIAL_WALLET['realisedPnl'] #FIXME not used
+            self.unrealisedPnl = cwcn_config.CWCN_SIMULATION_CONFIG.INITIAL_WALLET['unrealisedPnl'] #FIXME not used
         else:
             self._update_wallet_()
         self.pastAvailableBalance = self.availableBalance
-        self.pastUnrealizedPnl = self.unrealizedPnl
+        self.pastUnrealisedPnl = self.unrealisedPnl
     def _request_info_(self):pass
     def _update_wallet_(self,_dict=None):
         if(_dict is None and not cwcn_config.PAPER_INSTRUMENT):
@@ -504,12 +509,12 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
         try:
             if(not self._step_flgs['wallet_been_updated']):
                 logging.error("update wallet before getting reward")
-            # return self._uc_wallet_.availableBalance * _certainty.std() #self._uc_wallet_.realizedPnl+
+            # return self._uc_wallet_.availableBalance * _certainty.std() #self._uc_wallet_.realisedPnl+
             rward=self._uc_wallet_.availableBalance-self._uc_wallet_.pastAvailableBalance\
-                +0.6*(self._uc_wallet_.unrealizedPnl-self._uc_wallet_.pastUnrealizedPnl)
+                +0.6*(self._uc_wallet_.unrealisedPnl-self._uc_wallet_.pastUnrealisedPnl)
             self._uc_wallet_.pastAvailableBalance=self._uc_wallet_.availableBalance
-            self._uc_wallet_.pastUnrealizedPnl=self._uc_wallet_.unrealizedPnl
-            # return self._uc_wallet_.availableBalance + 0.7*self._uc_wallet_.unrealizedPnl #self._uc_wallet_.realizedPnl+
+            self._uc_wallet_.pastUnrealisedPnl=self._uc_wallet_.unrealisedPnl
+            # return self._uc_wallet_.availableBalance + 0.7*self._uc_wallet_.unrealisedPnl #self._uc_wallet_.realisedPnl+
         except Exception as e:
             logging.warning("Unable to get REWARD : {}".format(e))
             rward=0.0
@@ -543,7 +548,7 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
                 logging.warning("RESETING DATA ADQUISITION, RESTARTING FILE ITERATION")
                 self._uc_instrumet_._load_instrument_representation_()
         else:
-            while(not self.new_tick_aviable_on_queue):
+            while(not self._uc_instrumet_.new_tick_aviable_on_queue):
                 self._echange_instrument_loop.run_until_complete(asyncio.sleep(0.05))
             # sys.stdout.write("··· waiting for tick ···")
             # sys.stdout.write(cwcn_config.CWCN_CURSOR.CARRIER_RETURN)
@@ -564,7 +569,7 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
         self.c_info=self._request_info_(_certainty=_certainty)
         # ---
         self._assert_step_flags_()
-        sys.stdout.write("{}{}\t\t\t\t\t\t\t\t\t\t\t\t\t\tbalance : {:.4f} \t unrealizedPnl: {:.4}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,self._uc_wallet_.availableBalance, self._uc_wallet_.unrealizedPnl))
+        sys.stdout.write("{}{}\t\t\t\t\t\t\t\t\t\t\t\t\t\tbalance : {:.4f} \t unrealisedPnl: {:.4}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,self._uc_wallet_.availableBalance, self._uc_wallet_.unrealisedPnl))
         sys.stdout.flush()
         # ---
         return self.c_alliu,self.c_reward,self.c_done,self.c_info
@@ -577,7 +582,7 @@ class KUJTIYU_UJCAMEI_CAJTUCU:
             # --- 
         else:
             logging.warning("reset is not thougth trught on non paper instrument")
-            self._update_wallet_(self.uc._echange_instrument.user_instrument.get_account_overview())
+            self._uc_wallet_._update_wallet_(self._echange_instrument.user_instrument.get_account_overview())
         # --- --- 
         self.wk_ujcamei_cajtucu.wk_state._reset_()
         # --- --- 
@@ -605,10 +610,10 @@ if __name__=="__main__":
     print("--- --- --- --- ")
     print(ujcamei_cajtucu.step(2))
     print("--- --- --- --- ")
-    # ujcamei_cajtucu._uc_instrumet_.price_duuruva._plot_duuruva_()
-    # ujcamei_cajtucu._uc_instrumet_.size_duuruva._plot_duuruva_()
-    # ujcamei_cajtucu._uc_instrumet_.side_duuruva._plot_duuruva_()
-    # ujcamei_cajtucu._uc_instrumet_.time_delta_duuruva._plot_duuruva_()
-    # ujcamei_cajtucu._uc_instrumet_.price_delta_duuruva._plot_duuruva_()
+    # ujcamei_cajtucu._uc_instrumet_.duuruva['price']._plot_duuruva_()
+    # ujcamei_cajtucu._uc_instrumet_.duuruva['size']._plot_duuruva_()
+    # ujcamei_cajtucu._uc_instrumet_.duuruva['side']._plot_duuruva_()
+    # ujcamei_cajtucu._uc_instrumet_.duuruva['time_delta']._plot_duuruva_()
+    # ujcamei_cajtucu._uc_instrumet_.duuruva['price_delta']._plot_duuruva_()
     # import matplotlib.pyplot as plt
     # plt.show()

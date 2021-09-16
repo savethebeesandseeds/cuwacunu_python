@@ -101,16 +101,18 @@ logging.tsinuu_logging = tsinuu_logging
 
 # --- --- --- --- 
 # --- --- --- --- --- --- --- ---  
-PAPER_INSTRUMENT = True #FIXME # < --- --- --- --- FAKE / REAL ; (bool) flag
+PAPER_INSTRUMENT = False #FIXME # < --- --- --- --- FAKE / REAL ; (bool) flag
 # --- --- --- --- 
 # --- --- --- 
 # --- --- 
+SYMBOL_INSTRUMENT = 'BTCUSDTPERP' #'BCHUSDTPERP' #'BTCUSDTPERP' #'SINE-100'#'BTCUSDTPERP' #'ADAUSDTPERP'/'BTCUSDTPERP'
 # ---  
-ALLOW_TSANE = False
+ALLOW_TSANE = True
 # ---  
 ALLOW_TRAIN = True #FIXME
-TRAIN_ON_FORECAST = True
+TRAIN_ON_FORECAST = False
 FORECAST_HORIZONS = 3
+STOP_TO_PLOT_EVERY = 5000000
 # ---  
 if(TRAIN_ON_FORECAST):assert(ALLOW_TRAIN and PAPER_INSTRUMENT)
 # ---  
@@ -131,14 +133,6 @@ class CWCN_DUURUVA_CONFIG:
     DUURUVA_MAX_COUNT = 100
     DUURUVA_READY_COUNT = 50
     MIN_STD = 0.0001
-    # ---  
-    STD_OR_NORM_BAO = {
-        'price':'norm', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x. ---a: see duuruva for references
-        'size':'norm', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.  ---a: see duuruva for references
-        'side':'norm', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.  ---a: see duuruva for references
-        'price_delta':'norm', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.   ---a: see duuruva for references
-        'time_delta':'norm', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.---a: see duuruva for references
-    }
     # --- --- --- 
     ENABLE_DUURUVA_IMU = False #FIXME agent learns to get bad imu to lower the mean
     # --- --- --- GAE/PPO
@@ -146,16 +140,17 @@ class CWCN_DUURUVA_CONFIG:
     NORMALIZE_RETURNS = True # needed for munaajpi to train, but weird #FIXME
     NORMALIZE_ADVANTAGE = True # recommended by experts
     # --- --- --- 
-    NORMALIZE_ALLIU_PRICE = True # asert True when forecast training
-    NORMALIZE_ALLIU_SIZE = False
-    NORMALIZE_ALLIU_SIDE = False
-    NORMALIZE_ALLIU_PRICE_DELTA = True
-    NORMALIZE_ALLIU_TIME_DELTA = True
+    COMPUTE_ALLIU_PRICE = True # asert True when forecast training
+    COMPUTE_ALLIU_SIZE = False
+    COMPUTE_ALLIU_SIDE = False
+    COMPUTE_ALLIU_PRICE_DELTA = True
+    COMPUTE_ALLIU_TIME_DELTA = True
+    COMPUTE_ALLIU_CURRENTqTY = False
     # --- --- --- 
 # --- --- --- --- 
 class CWCN_OPTIONS:
     COLOR_PALLETE=['red','white','yellow','green','purple','blue']
-    PLOT_INTERVAL       = 5
+    PLOT_INTERVAL       = STOP_TO_PLOT_EVERY
     PLOT_FLAG           = True
     RENDER_FLAG         = False
     AHDO_PLOT_SETS=['imu,returns,value,price','imu,price,put_certainty,pass_certainty,call_certainty']#alliu:0, forecast_non_uwaabo
@@ -164,7 +159,7 @@ class CWCN_OPTIONS:
 class CWCN_INSTRUMENT_CONFIG:
     # --- --- --- 
     EXCHANGE = 'POLONIEX' #FIXME not used
-    SYMBOL = 'BTCUSDTPERP' #'BCHUSDTPERP' #'BTCUSDTPERP' #'SINE-100'#'BTCUSDTPERP' #'ADAUSDTPERP'/'BTCUSDTPERP'
+    SYMBOL = SYMBOL_INSTRUMENT #FIXME functions refer to CWCN_INSTURMENT_CONF insted of symbol_instrumnet directly, 
     CURRENCY = 'USDT'
     LEVERAGE="100"
     # --- --- --- 
@@ -204,8 +199,8 @@ class CWCN_SIMULATION_CONFIG:
     # --- --- --- 
     INITIAL_WALLET={
         "availableBalance": 100.0,
-        "realizedPnl": 0.0,
-        "unrealizedPnl":0.0,
+        "realisedPnl": 0.0,
+        "unrealisedPnl":0.0,
         "marginBalance": 100.0,
         "accountEquity":0.0,
         "positionMargin": 0.0,
@@ -251,41 +246,68 @@ class CWCN_UJCAMEI_CAJTUCU_CONFIG:
     # --- --- --- 
     # --- --- --- --- --- --- 
     # --- --- --- 
-    ALLIU_COUNT = 6 #FIXed
-    TSANE_COUNT = len(list(TSANE_ACTION_DICT.keys()))
     IMU_COUNT   = 1 #FIXed
+    TSANE_COUNT = len(list(TSANE_ACTION_DICT.keys()))
     UJCAMEI_ALLIU_SEQUENCE_SIZE = 24 # size of alliu recurrent input buffer
+    # --- --- --- 
     UJCAMEI_ACTIVE_BAO = ['price', 'price_delta', 'time_delta']
+    ALLIU_COUNT = len(UJCAMEI_ACTIVE_BAO)
     UJCAMEI_BAO = {
         # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
         #                # price 
-        'price':(lambda pa, pos, wal, tk_dict, past_tk_dict : tk_dict['price']),
+        'price.compute_flag':True,
+        'price':(lambda pos, wal, tk_dict, past_tk_dict : tk_dict['price']),
+        'price.tensor':(lambda tk_dict:torch.Tensor([tk_dict['price']]).squeeze(0)),
+        'price.std_or_norm':'norm', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x. ---a: see duuruva for references
         # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
         #                # size 
+        'size.compute_flag':True,
         'size':(lambda pos, wal, tk_dict, past_tk_dict : tk_dict['size']),
+        'size.tensor':(lambda tk_dict:torch.Tensor([tk_dict['size']]).squeeze(0)),
+        'size.std_or_norm':'std', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.  ---a: see duuruva for references
         # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
         #                # side 
-        'side':-(lambda pos, wal, tk_dict, past_tk_dict : tk_dict if tk_dict['side']=='sell' else +1 if tk_dict['side']=='buy' else 0),
+        'side.compute_flag':True,
+        'side':(lambda pos, wal, tk_dict, past_tk_dict : -1 if tk_dict['side']=='sell' else +1 if tk_dict['side']=='buy' else 0),
+        'side.tensor':(lambda tk_dict:torch.Tensor([-1 if tk_dict['side']=='sell' else +1 if tk_dict['side']=='buy' else 0]).squeeze(0)),
+        'side.std_or_norm':'not', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.  ---a: see duuruva for references
         # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
         #                # time_delta 
+        'time_delta.compute_flag':True,
         'time_delta':(lambda pos, wal, tk_dict, past_tk_dict : tk_dict['ts']-past_tk_dict['ts']),
+        'time_delta.tensor':(lambda tk_dict:torch.Tensor([tk_dict['time_delta']]).squeeze(0)),
+        'price_delta.std_or_norm':'std', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.   ---a: see duuruva for references
         # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
         #                # price_delta 
+        'price_delta.compute_flag':True,
         'price_delta':(lambda pos, wal, tk_dict, past_tk_dict : tk_dict['price']-past_tk_dict['price']),
+        'price_delta.tensor':(lambda tk_dict: torch.Tensor([tk_dict['price_delta']]).squeeze(0)),
+        'time_delta.std_or_norm':'std', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.---a: see duuruva for references
         # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
         #                # ts 
+        'ts.compute_flag':True,
         'ts':(lambda pos, wal, tk_dict, past_tk_dict : tk_dict['ts']),
+        'ts.tensor':(lambda tk_dict: torch.Tensor([tk_dict['ts']]).squeeze(0)),
+        'ts.std_or_norm':'not', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.---a: see duuruva for references
         # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
         #                # sequence #FIXME what!
-        'sequence':(lambda pos, wal, tk_dict, past_tk_dict : tk_dict['sequence']),
+        #.'compute_flag':True,
+        # 'sequence':(lambda pos, wal, tk_dict, past_tk_dict : tk_dict['sequence']),
+        # 'sequence.tensor':(lambda : None),
+        # ...'sequence.std_or_norm':'norm', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.---a: see duuruva for references
         # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
         #                # currentQty 
+        'currentQty.compute_flag':True,
         'currentQty':(lambda pos, wal, tk_dict, past_tk_dict : pos.currentQty),
+        'currentQty.tensor':(lambda tk_dict: torch.Tensor([tk_dict['currentyQty']]).squeeze(0)),
+        'currentQty.std_or_norm':'norm', # 'norm'/'std'/'not' : 'norm' is (x-mean)/(std) ; 'std' is x/std ; 'not' when duuruva wrapper returns just but x.---a: see duuruva for references
+        # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+        #FIXME missing some messures for non_uawabo_forecast
     }
     # --- --- --- 
     POSITION_UPDATE_METHODS = {}
     WALLET_UPDATE_METHODS = {
-        'stop_loss': (lambda x : x.uc._clear_positions_() if x.unrealizedPnl < -99 else None)
+        'stop_loss': (lambda x : x.uc._clear_positions_() if x.unrealisedPnl is not None and x.unrealisedPnl < -99 else None)
     }
     # --- --- --- 
 # --- --- --- --- 
