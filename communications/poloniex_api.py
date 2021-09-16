@@ -1,4 +1,5 @@
 # --- --- --- --- 
+# poloniex.api
 # --- --- --- --- no asynco aditional imports must be found, weird things are happening
 import json
 import requests
@@ -428,6 +429,10 @@ class MarketClient:
         }
 
         return self._request('GET', '/api/v1/ticker', params)
+    
+    def _reset_(self):
+        logging.warning("_reset_ is not implemented for market instrument in poloniex api")
+        pass
 
 # --- --- --- TRADE
 class TradeClient:
@@ -586,6 +591,7 @@ class TradeClient:
         client_oid = str(client_oid) if client_oid else str(uuid4())
 
         params = {
+            'type'     : 'market',
             'symbol'   : symbol,
             'side'     : side,
             'leverage' : leverage,
@@ -630,8 +636,15 @@ class TradeClient:
         return self._request('DELETE', '/api/v1/stopOrders', params, True)
     
     def cancel_all_orders(self, symbol):
-        self.cancel_all_limit_orders(symbol)
-        self.cancel_all_stop_orders(symbol)
+        logging.info("[cancel_all_orders]")
+        logging.info("[cancel_all_limit_orders]")
+        logging.info(
+            json.dumps(self.cancel_all_limit_orders(symbol),indent=4)
+        )
+        logging.info("[cancel_all_stop_orders]")
+        logging.info(
+            json.dumps(self.cancel_all_stop_orders(symbol),indent=4)
+        )
         return True #FIXME sure is true
 
     def get_order_list(self, **kwargs):
@@ -674,8 +687,25 @@ class TradeClient:
 
         return self._request('GET', f'/api/v1/orders/{order_id}', auth=True)
     
-    def emergency_clear_positions(self):
-        assert(False), "implement"
+    def clear_positions(self):
+        # self.get_position_details(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
+        t_init = time.time()
+        logging.info("clearning all account positions")
+        all_positions_details=self.get_all_positions()
+        for _pos_d in all_positions_details:
+            if(abs(_pos_d['currentQty'])>0):
+                logging.info("clear position por symbol : {}".format(_pos_d['symbol']))
+                order_data=c_trade_instrument.trade_instrument.create_market_order(
+                    symbol=_pos_d['symbol'],
+                    side='sell' if _pos_d['currentQty']>0 else 'buy',
+                    size=abs(_pos_d['currentQty']),
+                    leverage=cwcn_config.CWCN_INSTRUMENT_CONFIG.LEVERAGE)
+            c_trade_instrument.trade_instrument.cancel_all_orders(_pos_d['symbol'])
+        logging.warning("all positions clear in {}s".format(t_init-time.time()))
+        return True
+    def _reset_(self):
+        logging.warning("_reset_ is not implemented for trade instrument in poloniex api")
+        pass
 
 # --- --- --- --- USER
 class UserClient:
@@ -690,21 +720,28 @@ class UserClient:
         # { 
         #     "code": "200000",
         #     "data": {
-        #     "accountEquity": 99.8999305281, //Account equity = marginBalance + Unrealised PNL 
-        #     "unrealisedPNL": 0, //Unrealised profit and loss
-        #     "marginBalance": 99.8999305281, //Margin balance = positionMargin + orderMargin + frozenFunds + availableBalance
-        #     "positionMargin": 0, //Position margin
-        #     "orderMargin": 0, //Order margin
-        #     "frozenFunds": 0, //Frozen funds 
-        #     "availableBalance": 99.8999305281 //Available balance
-        #     "currency": "USDT" //currency code
+        # # # # # {
+        # # # # #     "unrealizedPNL": 0.0,
+        # # # # #     "frozenFunds": 0,
+        # # # # #     "trialAccountOverview": {
+        # # # # #         "totalBalance": 0,
+        # # # # #         "holdBalance": 0,
+        # # # # #         "availableBalance": 0
+        # # # # #     },
+        # # # # #     "currency": "USDT",
+        # # # # #     "accountEquity": 5.0,
+        # # # # #     "positionMargin": 0.0,
+        # # # # #     "orderMargin": 0,
+        # # # # #     "marginBalance": 5.0,
+        # # # # #     "availableBalance": 5.0
+        # # # # # }
         #     }
         # }
         return self._request('GET', '/api/v1/account-overview', kwargs, True)
 
     def get_transaction_history(self, **kwargs):
         """
-        If there are open positions, the status of the first page returned will be Pending, indicating the realised profit and loss in the current 8-hour settlement period.
+        If there are open positions, the status of the first page returned will be Pending, indicating the realized profit and loss in the current 8-hour settlement period.
         Please specify the minimum offset number of the current page into the offset field to turn the page.
         Param	    Type	Description
         startAt	    long	[Optional] Start time (milisecond)
@@ -716,6 +753,9 @@ class UserClient:
 
         return self._request('GET', '/api/v1/transaction-history', kwargs, True)
 
+    def _reset_(self):
+        logging.warning("_reset_ is not implemented for user instrument in poloniex api")
+        pass
 # --- ---  
 # --- --- --- 
 # --- --- --- --- 
@@ -880,11 +920,54 @@ if __name__=='__main__':
     # SYMBOL = 'BTCUSDTPERP'
     # --- --- --- --- 
     import time
-    # --- --- --- --- 
+    # --- --- --- --- s
     c_trade_instrument = EXCHANGE_INSTRUMENT(_is_farm=False)
     # time.sleep(30)
-    c_trade_instrument._market_methods_()
-    logging.info(json.dumps(c_trade_instrument.market_instrument.get_trade_history(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL),indent=4))
+    # c_trade_instrument._market_methods_()
+    # logging.info(json.dumps(c_trade_instrument.market_instrument.get_trade_history(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL),indent=4))
     # asyncio.run(c_trade_instrument._ws_methods_())
     # asyncio.run(c_trade_instrument._ticker_data_farm_())
     # c_trade_instrument._user_methods_()
+    logging.info("get_account_overview:")
+    logging.info(json.dumps(c_trade_instrument.user_instrument.get_account_overview(),indent=4))
+    logging.info("get_position_details:")
+    logging.info(json.dumps(c_trade_instrument.trade_instrument.get_position_details(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL),indent=4))
+    logging.info("get_all_positions:")
+    logging.info(json.dumps(c_trade_instrument.trade_instrument.get_all_positions(),indent=4))
+
+    logging.info("get_ticker:")
+    logging.info(json.dumps(c_trade_instrument.market_instrument.get_ticker(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL),indent=4))
+
+    # logging.info("create_market_order: sell")
+    # order_data=c_trade_instrument.trade_instrument.create_market_order(
+    #     symbol=cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,
+    #     side='sell',
+    #     size=1,
+    #     leverage=cwcn_config.CWCN_INSTRUMENT_CONFIG.LEVERAGE)
+    # logging.info(json.dumps(order_data,indent=4))
+    # logging.info("delay:")
+    # time.sleep(10)
+    # c_trade_instrument.trade_instrument.clear_positions()
+
+
+    # logging.info("get_position_details:")
+    # logging.info(json.dumps(c_trade_instrument.trade_instrument.get_position_details(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL),indent=4))
+    # # logging.info("get_order_list:")
+    # # logging.info(json.dumps(c_trade_instrument.trade_instrument.get_order_list(),indent=4))
+    # logging.info("get_order_details:")
+    # order_details=c_trade_instrument.trade_instrument.get_order_details(order_data['orderId'])
+    # logging.info(json.dumps(order_details,indent=4))
+    # # logging.info("cancel_order:")
+    # # cancel_order_details=c_trade_instrument.trade_instrument.cancel_order(order_data['orderId'])
+    # # logging.info(json.dumps(cancel_order_details,indent=4))
+    # logging.info("create_market_order: buy")
+    # order_data=c_trade_instrument.trade_instrument.create_market_order(
+    #     symbol=cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,
+    #     side='buy',
+    #     size=1,
+    #     leverage=cwcn_config.CWCN_INSTRUMENT_CONFIG.LEVERAGE)
+    # logging.info(json.dumps(order_data,indent=4))
+    # logging.info("get_account_overview:")
+    # logging.info(json.dumps(c_trade_instrument.user_instrument.get_account_overview(),indent=4))
+    # logging.info("cancel_all_orders:")
+    # logging.info(json.dumps(c_trade_instrument.trade_instrument.cancel_all_orders(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL),indent=4))

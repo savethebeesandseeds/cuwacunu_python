@@ -1,4 +1,6 @@
 # --- --- ---
+# cwcn_kemu_piaabo
+# --- --- ---
 import os
 import sys
 # --- --- ---
@@ -110,7 +112,7 @@ def kemu_plot_queue_item(c_queue,itm):
             self.axis.offsetText.set_visible(False)
             self.axis.set_label_text(self.label + " "+ fmt.get_offset() )
     # --- ---
-    color_pallete=['red','white','yellow','purple','green']
+    color_pallete=cwcn_config.CWCN_OPTIONS.COLOR_PALLETE
     # --- ---
     fig, ax = plt.subplots(1, 1)
     # ax.set_title("{}".format(),color=(1,1,1),**{'fontname':'DejaVu Sans'})

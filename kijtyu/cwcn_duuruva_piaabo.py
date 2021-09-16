@@ -1,12 +1,19 @@
 # --- --- ---
+# cwcn_duuruva_piaabo.py
+# --- --- ---
+# a mayor TEHDUJCO to python fundation
+# --- --- ---
+# a mayor TEHDUJCO to the torch fundation
+# --- --- ---
 import torch
 import logging
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 # --- --- ---
 import cwcn_config
 # --- --- ---
 class DUURUVA:
-    # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-    def __init__(self,_duuruva_vector_size : int,_wrapper_duuruva_normalize : bool=False, _d_name : str=None):
+    def __init__(self,_duuruva_vector_size : int,_wrapper_duuruva_std_or_norm : bool=False, _d_name : str=None):
         self._d_name=_d_name
         self._duuruva_cosas = [
             'value',
@@ -21,7 +28,7 @@ class DUURUVA:
             'skewness',
         ]
         self._duuruva_vector_size=_duuruva_vector_size
-        self._wrapper_duuruva_normalize=_wrapper_duuruva_normalize
+        self._wrapper_duuruva_std_or_norm=_wrapper_duuruva_std_or_norm
         self._reset_duuruva_()
         self._plot_instruction = cwcn_config.CWCN_DUURUVA_CONFIG.PLOT_LEVEL
         self._plot_holder = dict([(_dc,[]) for _dc in self._duuruva_cosas])
@@ -75,6 +82,8 @@ class DUURUVA:
                     c_value = c_vect[_v].detach().clone()
                 elif(struct_case==3):
                     c_value = c_vect.detach().clone()
+                # --- --- --- --- --- --- --- --- --- --- a mayor TEHDUJCO to the WIKI
+                # --- --- --- --- https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
                 self._duuruva[_v]['value']=c_value
                 self._duuruva[_v]['max']=max(self._duuruva[_v]['max'], self._duuruva[_v]['value'])
                 self._duuruva[_v]['min']=min(self._duuruva[_v]['min'], self._duuruva[_v]['value'])
@@ -89,31 +98,36 @@ class DUURUVA:
                 self._duuruva[_v]['variance'] = self._duuruva[_v]['M2']/(_n-1)
                 self._duuruva[_v]['kurtosis'] = (_n*self._duuruva[_v]['M4'])/(self._duuruva[_v]['M2']*self._duuruva[_v]['M2'])-3
                 self._duuruva[_v]['skewness'] = torch.sqrt(_n)*self._duuruva[_v]['M3']/(torch.pow(self._duuruva[_v]['M2'],3)*torch.sqrt(self._duuruva[_v]['M2'])) #FIXME check if is right
-                if(self._wrapper_duuruva_normalize):
+                if('norm'):
                     c_standar = (c_value - self._duuruva[_v]['mean'])/(torch.sqrt(self._duuruva[_v]['variance']) + cwcn_config.CWCN_DUURUVA_CONFIG.MIN_STD)
-                    if(struct_case==1):
-                        if(self._is_duuruva_ready_()):
-                            c_vect[_b][_v] = c_standar
-                        else:
-                            c_vect[_b][_v] = torch.Tensor([0]).squeeze(0)
-                    elif(struct_case==2):
-                        if(self._is_duuruva_ready_()):
-                            c_vect[_v] = c_standar
-                        else:
-                            c_vect[_v] = torch.Tensor([0]).squeeze(0)
-                    elif(struct_case==3):
-                        if(self._is_duuruva_ready_()):
-                            c_vect = c_standar
-                        else:
-                            c_vect = torch.Tensor([0]).squeeze(0)
-                    # logging.deep_logging("waka {}:struct_case:{} / is_duuruva_ready: {} / mean:{} / variance:{} / normal:{} / standar:{}".format(self._d_name,struct_case,self._is_duuruva_ready_(),self._duuruva[_v]['mean'],self._duuruva[_v]['variance'],c_value,c_standar))
+                elif('std'):
+                    c_standar = (c_value)/(torch.sqrt(self._duuruva[_v]['variance']) + cwcn_config.CWCN_DUURUVA_CONFIG.MIN_STD)
+                elif('not'):
+                    c_standar = c_value
+                else:
+                    assert(False), "wrong wrapper_duuruva_std_or_norm configuration"
+                # --- --- --- --- --- 
+                if(struct_case==1):
+                    if(self._is_duuruva_ready_()):
+                        c_vect[_b][_v] = c_standar
+                    else:
+                        c_vect[_b][_v] = torch.Tensor([0]).squeeze(0)
+                elif(struct_case==2):
+                    if(self._is_duuruva_ready_()):
+                        c_vect[_v] = c_standar
+                    else:
+                        c_vect[_v] = torch.Tensor([0]).squeeze(0)
+                elif(struct_case==3):
+                    if(self._is_duuruva_ready_()):
+                        c_vect = c_standar
+                    else:
+                        c_vect = torch.Tensor([0]).squeeze(0)
+                # logging.deep_logging("waka {}:struct_case:{} / is_duuruva_ready: {} / mean:{} / variance:{} / normal:{} / standar:{}".format(self._d_name,struct_case,self._is_duuruva_ready_(),self._duuruva[_v]['mean'],self._duuruva[_v]['variance'],c_value,c_standar))
                 if(self._plot_instruction is not None):
                     for _dc in self._duuruva_cosas:
                         self._plot_holder[_dc].append(self._duuruva[_v][_dc].clone())
         return c_vect
     def _plot_duuruva_(self):
-        import matplotlib.pyplot as plt
-        import matplotlib.ticker as mticker
         class Labeloffset():
             def __init__(self,  ax, label="", axis="y"):
                 self.axis = {"y":ax.yaxis, "x":ax.xaxis}[axis]

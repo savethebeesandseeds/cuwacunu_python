@@ -1,4 +1,6 @@
 # --- ---- --- 
+# ray_wikimyei
+# --- ---- --- 
 import os
 import ast
 import sys
@@ -43,6 +45,9 @@ class RAY_ORDER_JKIMYEI: # use pytorch/ray to optimize hyperparameters
         # --- --- --- 
     def _ray_iteration_(self,config):
         # --- --- --- 
+        
+        #... #FIXME
+
         logging.ray_logging("--- ray step ---")
         self.ray_wikimyei=cwcn_wikimyei_nebajke.WIKIMYEI(config)
         self.ray_wikimyei.jkimyei._jkimyei_wikimyei_()

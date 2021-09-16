@@ -1,4 +1,6 @@
 # --- --- --- --- 
+# cwcn_simulation_kijtyu
+# --- --- --- --- 
 # --- --- --- --- no async needed
 import ast
 import random
@@ -31,14 +33,27 @@ class EXCHANGE_INSTRUMENT:
         logging.info("[ready:] (simulation) EXCHANGE INSTRUMENT")
     # --- --- --- 
     def _make_all_step_updates_(self):
+        self.trade_instrument._update_current_orders_state_pnl_()
+        self.trade_instrument._close_open_orders_by_prob_()
+        self.user_instrument._update_account_overview_()
+        return True
+    def _step_updates_(self):
         if(self.market_instrument._load_tick_()):
-            self.trade_instrument._update_current_orders_state_pnl_()
-            self.trade_instrument._close_open_orders_by_prob_()
-            self.user_instrument._update_account_overview_()
+            self._make_all_step_updates_()
             return True
         else:
             return False
     def _invoke_ujcamei_cajtucu_(self):
+        _tick_data={
+            "symbol": cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,
+            "price": self.market_instrument._instrument_state['price'],
+            "side": self.market_instrument._instrument_state['side'],
+            "size": self.market_instrument._instrument_state['size'],
+            "ts": self.market_instrument._instrument_state['ts'],
+        }
+        if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
+            _tick_data['forecast_non_uwaabo']=self.market_instrument._instrument_state['forecast_non_uwaabo']
+        # --- --- --- --- --- 
         self.call_function({
             'topic':'/contractAccount/wallet',
             'subject': 'availableBalance.change',
@@ -50,21 +65,39 @@ class EXCHANGE_INSTRUMENT:
         self.call_function({
             'topic':'/contractMarket/ticker',
             'subject': 'ticker',
-            'data':{
-                "symbol": cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,
-                "price": self.market_instrument._instrument_state['price'],
-                "side": self.market_instrument._instrument_state['side'],
-                "size": self.market_instrument._instrument_state['size'],
-                "ts": self.market_instrument._instrument_state['ts'],
-            },
+            'data':_tick_data,
         })
 # --- --- --- --- MARKET 
 class MarketClient:
     def __init__(self, _exchange_instrument):
         self.ei=_exchange_instrument
         self._request_file_path = os.path.join(cwcn_config.CWCN_SIMULATION_CONFIG.DATA_FOLDER,"{}{}".format(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,cwcn_config.CWCN_SIMULATION_CONFIG.DATA_EXTENSION))
+        if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
+            self._enhance_file_with_forecast_()
         self._load_file_()
         self._reset_()
+    def _enhance_file_with_forecast_(self):
+        # --- --- --- open
+        with open(self._request_file_path) as _f_:
+            file_content=_f_.read().split(',\n')
+        file_ticks=[]
+        # --- --- --- forecast
+        for _fc in file_content:
+            try:
+                file_ticks.append(ast.literal_eval(_fc))
+            except:
+                logging.warning("Failed to enhance line file content : {}".format(_fc))
+        for _idn,_ft in enumerate(file_ticks[:-cwcn_config.FORECAST_HORIZONS]):
+            _ft['forecast_non_uwaabo']=0
+            for _idh in range(cwcn_config.FORECAST_HORIZONS):
+                _ft['forecast_non_uwaabo']+=file_ticks[_idn+_idh]['price']-_ft['price']
+            _ft['forecast_non_uwaabo']/=cwcn_config.FORECAST_HORIZONS
+        file_ticks=file_ticks[:-cwcn_config.FORECAST_HORIZONS]
+        # --- --- --- save
+        self._request_file_path = os.path.join(cwcn_config.CWCN_SIMULATION_CONFIG.DATA_FOLDER,"{}.forecast{}".format(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,cwcn_config.CWCN_SIMULATION_CONFIG.DATA_EXTENSION))
+        with open(self._request_file_path,'w') as _f_:
+            for _ft_ in file_ticks:
+                _f_.write('{},\n'.format(_ft_))
     def _reset_(self):
         self._instrument_state=None
     def _load_file_(self):
@@ -85,7 +118,7 @@ class MarketClient:
         The real-time ticker includes the last traded price, the last traded size, transaction ID, the side of liquidity taker, the best bid price and size, the best ask price and size as well as the transaction time of the orders.
         These messages can also be obtained through Websocket. The Sequence Number is used to judge whether the messages pushed by Websocket is continuous."""
         assert(symbol==cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL), "wrong symbol detected on get ticker (simulation)"
-        if(self.ei._make_all_step_updates_()):
+        if(self.ei._step_updates_()):
             self.ei._invoke_ujcamei_cajtucu_()
             return self._instrument_state
         else:
@@ -143,7 +176,10 @@ class TradeClient:
         else:
             self.client_orders.pop(c_match_order[0])
             self.ei.user_instrument._apply_delta_aviableBalance_(c_match_order[1]['orderPnl'])
-            sys.stdout.write("{}{}\t\t\t\t\t\t\t\t\t\t\t\t\t\t{}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,c_match_order[1]['orderPnl']))
+            if(c_match_order[1]['orderPnl']>=0):
+                sys.stdout.write("{}{}{}\t\t\t\t\t\t\t\t\t\t\t\t{}{}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,cwcn_config.CWCN_COLORS.GREEN,c_match_order[1]['orderPnl'],cwcn_config.CWCN_COLORS.REGULAR))
+            else:
+                sys.stdout.write("{}{}{}\t\t\t\t\t\t\t\t\t\t\t\t{}{}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,cwcn_config.CWCN_COLORS.RED,c_match_order[1]['orderPnl'],cwcn_config.CWCN_COLORS.REGULAR))
             sys.stdout.flush()
         self.ei.user_instrument._update_account_overview_() #FIXME maybe redundant
     def _get_isOpen_(self):
@@ -177,9 +213,9 @@ class TradeClient:
         #     "currentQty": -20,                               //Current position
         #     "currentCost": 0.00266375,                       //Current position value
         #     "currentComm": 0.00000271,                       //Current commission
-        #     "unrealisedCost": 0.00266375,                    //Unrealised value
-        #     "realisedGrossCost": 0,                          //Accumulated realised gross profit value
-        #     "realisedCost": 0.00000271,                      //Current realised position value
+        #     "unrealizedCost": 0.00266375,                    //Unrealized value
+        #     "realizedGrossCost": 0,                          //Accumulated realized gross profit value
+        #     "realizedCost": 0.00000271,                      //Current realized position value
         #     "isOpen": true,                                  //Opened position or not
         #     "markPrice": 7933.01,                            //Mark price
         #     "markValue": 0.00252111,                         //Mark value
@@ -191,23 +227,24 @@ class TradeClient:
         #     "posMargin": 0.00266779,                         //Position margin
         #     "posMaint": 0.00001724,                          //Maintenance margin
         #     "maintMargin": 0.00252516,                       //Position margin
-        #     "realisedGrossPnl": 0,                           //Accumulated realised gross profit value
-        #     "realisedPnl": -0.00000253,                      //Realised profit and loss
-        #     "unrealisedPnl": -0.00014264,                    //Unrealised profit and loss
-        #     "unrealisedPnlPcnt": -0.0535,                    //Profit-loss ratio of the position
-        #     "unrealisedRoePcnt": -0.0535,                    //Rate of return on investment
+        #     "realizedGrossPnl": 0,                           //Accumulated realized gross profit value
+        #     "realizedPnl": -0.00000253,                      //Realised profit and loss
+        #     "unrealizedPnl": -0.00014264,                    //Unrealized profit and loss
+        #     "unrealizedPnlPcnt": -0.0535,                    //Profit-loss ratio of the position
+        #     "unrealizedRoePcnt": -0.0535,                    //Rate of return on investment
         #     "avgEntryPrice": 7508.22,                        //Average entry price
         #     "liquidationPrice": 1000000,                     //Liquidation price
         #     "bankruptPrice": 1000000,                         //Bankruptcy price
         #     "settleCurrency": "XBT"                         //Currency used to clear and settle the trades     
         # }
         assert(symbol==cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL), "wrong symbol detected on get position details (simulation)"
+        self.ei._make_all_step_updates_()
         self._position_overview = {
             "symbol":symbol,
             "isOpen":self._get_isOpen_(),
             "currentQty":self._get_currentQty_(),
-            "realisedPnl":self._get_realizedPnl_(),
-            "unrealisedPnl":self._get_unrealizedPnl_(),
+            "realizedPnl":self._get_realizedPnl_(),
+            "unrealizedPnl":self._get_unrealizedPnl_(),
         }
         return self._position_overview
 
@@ -256,36 +293,43 @@ class TradeClient:
 
     def cancel_order(self, order_id):
         # to cancel an order is NOT to clear the position
-        if(all([_oo['isOpen'] for _oo in self.client_orders if _oo != order_id])):
+        if(all([_oo['isOpen'] for _oo in self.client_orders if _oo['clientOid'] == order_id])):
             self.ei.user_instrument._apply_delta_commission_() #FIXME may not be needed in clancel procedure
-            self.client_orders = [_oo for _oo in self.client_orders if _oo != order_id]
+            self.client_orders = [_oo for _oo in self.client_orders if _oo['clientOid'] != order_id]
         return True #FIXME check if order can be canceled
 
-    def cancel_all_orders(self):
+    def clear_positions(self,symbol):
         # to cancel an order is NOT to clear the position, only open orders can be cancel
         for _o in self.client_orders:
             if(_o['isOpen']):
                 self.cancel_order(_o["clientOid"])
+            else:
+                self.create_market_order(
+                    symbol=_o['symbol'],
+                    side='buy' if _o['side']=='sell' else 'sell',
+                    size=_o['size'],
+                    leverage=_o['leverage'],
+                )
         return True
     
-    def emergency_clear_positions(self):
-        self.cancel_all_orders()
-        for _o in self.client_orders:
-            if(not _o['isOpen']):
-                self.create_market_order(\
-                    symbol=cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL, 
-                    side='sell' if _o['side']=='buy' else 'buy', 
-                    size=1, 
-                    leverage=0, 
-                    client_oid=None)
-        return True
+    # def emergency_clear_positions(self):
+    #     self.clear_positions(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL)
+    #     for _o in self.client_orders:
+    #         if(not _o['isOpen']):
+    #             self.create_market_order(\
+    #                 symbol=cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL, 
+    #                 side='sell' if _o['side']=='buy' else 'buy', 
+    #                 size=_o['size'], 
+    #                 leverage=cwcn_config.CWCN_INSTRUMENT_CONFIG.LEVERAGE, 
+    #                 client_oid=None)
+    #     return True
 
     
 # --- --- --- --- USER
 class UserClient:
     # "data": {
-    #     "accountEquity": 99.8999305281, //Account equity = marginBalance + Unrealised PNL 
-    #     "unrealisedPNL": 0, //Unrealised profit and loss
+    #     "accountEquity": 99.8999305281, //Account equity = marginBalance + Unrealized Pnl 
+    #     "unrealizedPnl": 0, //Unrealized profit and loss
     #     "marginBalance": 99.8999305281, //Margin balance = positionMargin + orderMargin + frozenFunds + availableBalance
     #     "positionMargin": 0, //Position margin
     #     "orderMargin": 0, //Order margin
@@ -304,9 +348,9 @@ class UserClient:
         self.acc_overview_state['realizedPnl']+=_delta
         self.acc_overview_state['availableBalance']+=_delta
     def _update_account_unrealizedPnl_(self):
-        self.acc_overview_state['unrealisedPNL']=0.0
+        self.acc_overview_state['unrealizedPnl']=0.0
         for _o in self.ei.trade_instrument.client_orders:
-            self.acc_overview_state['unrealisedPNL']+=_o['orderPnl']
+            self.acc_overview_state['unrealizedPnl']+=_o['orderPnl']
     def _update_account_overview_(self,_dict={}):
         self.acc_overview_state.update(_dict)
         self._update_account_unrealizedPnl_()
@@ -317,10 +361,11 @@ class UserClient:
             self.acc_overview_state['availableBalance']
         self.acc_overview_state['accountEquity']=\
             self.acc_overview_state['marginBalance']+\
-            self.acc_overview_state['unrealisedPNL']
+            self.acc_overview_state['unrealizedPnl']
         # --- --- --- 
         # --- --- --- 
     def get_account_overview(self, **kwargs):
+        self.ei._make_all_step_updates_()
         return self.acc_overview_state
 # --- --- --- --- 
 if __name__=='__main__':

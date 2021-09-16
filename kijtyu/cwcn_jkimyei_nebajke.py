@@ -1,14 +1,12 @@
 # --- --- --- --- 
+# cwcn_jkimyei_nebajke.py
+# --- --- --- --- 
 import torch
 import numpy as np
-from torch.cuda import is_available
 import torch.optim as optim
-# --- --- --- ---
-import re
-from matplotlib import pyplot as plt
-# --- --- --- ---
 import os
 import logging
+from matplotlib import pyplot as plt
 # --- --- --- ---
 import cwcn_config
 import cwcn_wikimyei_nebajke
@@ -34,7 +32,11 @@ class JKIMYEI_PPO:
             _wikimyei.wk_config['HIPER_PROFILE_BUFFER_COUNT']) # load of step profile
         self.learning_queue=cwcn_wikimyei_piaabo.LEARNING_LOAD_QUEUE() # load of training profile
         # --- --- 
+        self.uwaabo_forecast_imibajcho_fun=torch.nn.MSELoss()
+        # --- --- 
     def _jkmimyei_gae_(self):
+        if(not cwcn_config.ALLOW_TRAIN):
+            logging.warning("Training is not allowed, skipping training")
         # --- --- 
         assert(self.ahdo_queue is not None), "Impossible to compute GAE, Jkimyei Queue found to be None"
         # --- --- 
@@ -43,7 +45,7 @@ class JKIMYEI_PPO:
         # --- --- 
         gamma=self.jk_wikimyei.wk_config['TEHDUJCO_GAMMA']
         lam=self.jk_wikimyei.wk_config['TEHDUJCO_GAE_LAMBDA']
-        _, next_value, __ = self.jk_wikimyei.model(self.jk_wikimyei.wk_state.c_alliu.unsqueeze(0)) # dist, value, energy
+        _, next_value,__ = self.jk_wikimyei.model(self.jk_wikimyei.wk_state.c_alliu.unsqueeze(0)) # dist, value, energy, certainty
         c_load_dict = self.ahdo_queue._dict_vectorize_queue_()
         c_load_dict['value'].append(next_value)
         gae = 0
@@ -68,15 +70,20 @@ class JKIMYEI_PPO:
         self.ahdo_queue._load_vect_to_queue_('returns',returns)
         self.ahdo_queue._load_vect_to_queue_('advantage',advantage)
     def _jkimyei_ppo_update_(self):
+        if(not cwcn_config.ALLOW_TRAIN):
+            logging.warning("Training is not allowed, skipping training")
+            return None
         # PPO EPOCHS is the number of times we will go through ALL the training data to make updates
         # --- --- --- 
         clip_param=self.jk_wikimyei.wk_config['ReferencesToNoMeButWhoThoseAllWhoMadeRechableTheImplementationOfThisAlgorithm_TEHDUJCO_EPSILON']
         # --- --- --- 
         self.hyper_ahdo_profile._standarize_select_prob_()
         # --- --- --- 
+        count_epoch=0
         count_steps=0
         for c_trayectory_load in self.hyper_ahdo_profile._random_queue_yield_by_prob_(\
                 _yield_count=self.jk_wikimyei.wk_config['TRAINING_EPOCHS']):
+            logging.jkimyei_logging("--- Train epoch {}".format(count_epoch))
             # grabs random mini-batches several times until we have covered all data
             # --- ---
             # --- ---
@@ -103,11 +110,11 @@ class JKIMYEI_PPO:
                 advantage.requires_grad=True
                 returns.requires_grad=True
                 # --- --- 
-                dist, value, energy=self.jk_wikimyei.model(alliu) # dist, value, energy
+                dist, value, certainty=self.jk_wikimyei.model(alliu) # dist, value, energy
                 # print("[size of sate:] {}, [dist:] {}".format(alliu.shape, dist))
                 entropy=dist.entropy().mean()
-                _, __, new_log_probs,___=self.jk_wikimyei._dist_to_tsane_(dist)
-                # --- ---
+                _, new_probs, new_log_probs,___=self.jk_wikimyei._dist_to_tsane_(dist)
+                # --- --- 
                 jk_profile.ratio=(new_log_probs - old_log_probs).exp()
                 jk_profile.surr1=jk_profile.ratio * advantage
                 jk_profile.surr2=torch.clamp(jk_profile.ratio, 1.0 - clip_param, 1.0 + clip_param) * advantage
@@ -118,7 +125,18 @@ class JKIMYEI_PPO:
                 jk_profile.munaajpi_imibajcho=self.jk_wikimyei.wk_config['MUNAAJPI_BETA'] * self.munaajpi_imibajcho_fun(returns, value)
                 jk_profile.uwaabo_imibajcho=torch.clamp(jk_profile.uwaabo_imibajcho,min=self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'],max=self.jk_wikimyei.wk_config['IMIBAJCHO_MAX'])
                 jk_profile.munaajpi_imibajcho=torch.clamp(jk_profile.munaajpi_imibajcho,min=self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'],max=self.jk_wikimyei.wk_config['IMIBAJCHO_MAX'])
-                jk_profile.imibajcho= jk_profile.munaajpi_imibajcho + jk_profile.uwaabo_imibajcho - self.jk_wikimyei.wk_config['TEHDUJCO_ENTROPY_BETA'] * entropy
+                # --- ---                 
+                if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
+                    jk_profile.imibajcho=\
+                        self.jk_wikimyei.wk_config['UWAABO_BETA'] * self.uwaabo_forecast_imibajcho_fun(new_probs,_trayectory['tsane_non_uwaabo']) \
+                            + jk_profile.munaajpi_imibajcho 
+                                # + jk_profile.uwaabo_imibajcho \
+                                #     - self.jk_wikimyei.wk_config['TEHDUJCO_ENTROPY_BETA'] * entropy
+                else:
+                    jk_profile.imibajcho=\
+                        jk_profile.munaajpi_imibajcho \
+                            + jk_profile.uwaabo_imibajcho \
+                                - self.jk_wikimyei.wk_config['TEHDUJCO_ENTROPY_BETA'] * entropy
                 # logging.jkimyei_logging("uwaabo_imibajcho: {}, \t munaajpi_imibajcho: {}, \t imibajcho: {}".format(jk_profile.uwaabo_imibajcho.size(),jk_profile.munaajpi_imibajcho.size(),jk_profile.imibajcho.size()))
                 # logging.jkimyei_logging("uwaabo_imibajcho: {:.4f}, \t munaajpi_imibajcho: {:.4f}, \t imibajcho: {:.4}".format(jk_profile.uwaabo_imibajcho,jk_profile.munaajpi_imibajcho, jk_profile.imibajcho))
                 # if(abs(jk_profile.uwaabo_imibajcho)>=min(abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MAX']),abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'])) or abs(jk_profile.munaajpi_imibajcho)>=min(abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MAX']),abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MIN']))):
@@ -132,12 +150,18 @@ class JKIMYEI_PPO:
                 # --- ---
                 self.learning_queue._append_(jk_profile,_detach_flag=True)
                 # --- ---
+                logging.jkimyei_logging("--- Train epoch {} / step : {} :: imibajcho: {:.4f},\tuwaabo_imibajcho: {:.4f},\tmunaajpi_imibajcho: {:.4f}".format(count_epoch,count_steps, jk_profile.imibajcho, jk_profile.uwaabo_imibajcho,jk_profile.munaajpi_imibajcho))
                 count_steps+=1
+            count_epoch+=1
     def _jkimyei_wikimyei_(self):
+        if(not cwcn_config.ALLOW_TRAIN):
+            logging.warning("Training is not allowed, skipping training")
+            return None
         # logging.jkimyei_logging(" + + + [New jkimyei iteration]")
         self.learning_queue._reset_queue_()
         self.ahdo_queue._reset_queue_()
         self.jk_wikimyei._reset_wikimyei_()
+        self.jk_wikimyei.model.train()
         for _ in range(self.jk_wikimyei.wk_config['AHDO_STEPS']):
             # --- ---
             done,ahdo_t=self.jk_wikimyei._wk_step_()
@@ -155,41 +179,35 @@ class JKIMYEI_PPO:
             self.jk_wikimyei._save_wikimyei_(cwcn_config.CWCN_CONFIG().ALWAYS_SAVING_MODEL_PATH)
         # --- --- 
     def _standalone_wikimyei_jkimyei_ppo_loop_(self):
+        if(not cwcn_config.ALLOW_TRAIN):
+            logging.warning("Training is not allowed, skipping training")
+            return None
         assert(self.jk_wikimyei.wk_config['AHDO_STEPS']>=self.jk_wikimyei.wk_config['MINI_BATCH_COUNT'])
         train_epoch = 0
-        self.best_imu = None
-        self.early_stop = False
-        while not self.early_stop:
+        test_imu = None
+        early_stop = False
+        while not early_stop:
             train_epoch += 1
-            logging.info("EPOCH : {} --- --- --- --- --- --- --- --- --- --- ".format(train_epoch))
+            logging.jkimyei_logging("EPOCH : {} --- --- --- --- --- --- --- --- --- --- ".format(train_epoch))
             # --- --- --- TRAIN
             self._jkimyei_wikimyei_()
             # --- --- --- Eval
             if train_epoch % self.jk_wikimyei.wk_config['VALIDATION_EPOCH'] == 0:
-                test_imu = np.mean([self.jk_wikimyei._test_wikimyei_on_ahpa_(render_flag=False) for _ in range(self.jk_wikimyei.wk_config['NUM_TESTS'])])
-                logging.jkimyei_logging('[STAND ALONE: INFO] epoch: %s. imu: %s' % (train_epoch, test_imu))
-                if(cwcn_config.CWCN_OPTIONS.RENDER_FLAG):
-                    self.jk_wikimyei._test_wikimyei_on_ahpa_(render_flag=cwcn_config.CWCN_OPTIONS.RENDER_FLAG)
-                if self.best_imu is None or self.best_imu < test_imu:
-                    if self.best_imu is not None:
-                        name = "%s_best_%+.3f.dat" % (self.jk_wikimyei.wk_config['AHPA_ID'], test_imu)
-                        logging.jkimyei_logging("[STAND ALONE: INFO:] Best imu updated: %.3f -> %.3f : %s" % (self.best_imu, test_imu,name))
-                        fname = os.path.join(self.jk_wikimyei.wk_config['CHECKPOINTS_FOLDER'], name)
-                        self.jk_wikimyei._save_wikimyei_(fname)
-                    self.best_imu = test_imu
-                if test_imu > self.jk_wikimyei.wk_config['BREAK_TRAIN_IMU']:
-                    logging.jkimyei_logging("[STAND ALONE: WARNING:] exit jkimyei loop by BREAK_TRAIN_IMU")
-                    self.early_stop = True
-            if(cwcn_config.CWCN_OPTIONS.PLOT_FLAG and train_epoch%cwcn_config.CWCN_OPTIONS.PLOT_INTERVAL==0):#
-                # self.ahdo_queue._plot_itm_('imu')
-                self.ahdo_queue._plot_itm_('imu,returns,value,alliu:0')
-                # self.ahdo_queue._plot_itm_('action,imu,alliu')
-                # self.learning_queue._plot_itm_('munaajpi_imibajcho,uwaabo_imibajcho')
-                # # self.learning_queue._plot_itm_('ratio,surr1,surr2')
-                # # self.ahdo_queue._plot_itm_('returns,advantage,gae,delta')
+                early_stop, test_imu = self.jk_wikimyei._test_wikimyei_on_ahpa_(render=cwcn_config.CWCN_OPTIONS.RENDER_FLAG)
+            # --- --- --- PRINT
+            if(cwcn_config.CWCN_OPTIONS.PLOT_FLAG and train_epoch%cwcn_config.CWCN_OPTIONS.PLOT_INTERVAL==0):
+                for _ps in cwcn_config.CWCN_OPTIONS.AHDO_PLOT_SETS:
+                    self.ahdo_queue._plot_itm_(_ps)
+                for _ps in cwcn_config.CWCN_OPTIONS.LEARNING_PLOT_SETS:
+                    self.learning_queue._plot_itm_(_ps)
                 plt.show()
+            # --- --- --- Breaks
+            if(test_imu is not None and test_imu > self.wk_config['BREAK_TRAIN_IMU']):
+                logging.jkimyei_logging("[TEST wk: WARNING:] exit jkimyei loop by BREAK_TRAIN_IMU")
+                early_stop = True
             if(train_epoch > self.jk_wikimyei.wk_config['BREAK_TRAIN_EPOCH']):
                 logging.jkimyei_logging("[STAND ALONE: WARNING:] exit jkimyei loop by BREAK_TRAIN_EPOCH")
-                self.early_stop = True
+                early_stop = True
+        # --- --- --- Render final result
         if(cwcn_config.CWCN_OPTIONS.RENDER_FLAG):
-            self.jk_wikimyei._test_wikimyei_on_ahpa_(render_flag=cwcn_config.CWCN_OPTIONS.RENDER_FLAG)
+            _,__=self.jk_wikimyei._test_wikimyei_on_ahpa_(render_flag=cwcn_config.CWCN_OPTIONS.RENDER_FLAG)

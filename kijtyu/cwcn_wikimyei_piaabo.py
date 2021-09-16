@@ -1,18 +1,8 @@
 # --- --- --- --- 
-import argparse
-import math
-import random
+# cwcn_wikimyei_piaabo
+# --- --- --- --- 
 import numpy as np
-import copy
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.distributions import Normal
-import gym
-# --- --- --- ---
-import os
-import sys
 import logging
 # --- --- --- ---
 import cwcn_config
@@ -48,8 +38,9 @@ class AHDO_PROFILE: # the trayectory is a single step
         self.alliu      = None
         self.log_prob   = None
         self.value      = None
+        self.price      = None
         # self.dist       = None
-        self.tsane     = None
+        self.tsane      = None
         self.advantage  = None
         self.gae        = None
         self.delta      = None
@@ -57,6 +48,15 @@ class AHDO_PROFILE: # the trayectory is a single step
         self.index      = None
         # --- --- 
         self.selec_prob = None
+        # --- --- 
+        if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
+            self.forecast_non_uwaabo = None
+            self.tsane_non_uwaabo = None
+        # --- --- 
+        self.certainty=None # vector [put/pass/call] or as declared in cwcn_config.UJCAMEI....TSANE_ACTION_DICT
+        self.put_certainty=None
+        self.pass_certainty=None
+        self.call_certainty=None
         # --- --- 
 # --- --- --- --- 
 class LEARNING_LOAD_QUEUE: #FIXME load can be better
