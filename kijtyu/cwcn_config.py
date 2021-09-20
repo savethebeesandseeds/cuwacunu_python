@@ -28,7 +28,7 @@ device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 c_now=datetime.now()
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] :: %(message)s',
+    format='[%(levelname)s] :: %(message)s',#'%(asctime)s [%(levelname)s] :: %(message)s',
     handlers=[
         logging.StreamHandler(),
         logging.FileHandler('../logs/cuwcunu_log_file_{}-{}-{}-{}.log'.format(c_now.year,c_now.month,c_now.day,c_now.hour))
@@ -101,20 +101,25 @@ logging.tsinuu_logging = tsinuu_logging
 
 # --- --- --- --- 
 # --- --- --- --- --- --- --- ---  
-PAPER_INSTRUMENT = False #FIXME # < --- --- --- --- FAKE / REAL ; (bool) flag
+PAPER_INSTRUMENT = True #FIXME # < --- --- --- --- FAKE / REAL ; (bool) flag
 # --- --- --- --- 
 # --- --- --- 
 # --- --- 
 SYMBOL_INSTRUMENT = 'BTCUSDTPERP' #'BCHUSDTPERP' #'BTCUSDTPERP' #'SINE-100'#'BTCUSDTPERP' #'ADAUSDTPERP'/'BTCUSDTPERP'
 # ---  
-ALLOW_TSANE = True
+GREEDY_TSANE_SAMPLE = True
+ALLOW_TSANE = True # ALLOW_TSANE=True/PAPER_INSTRUMENT=False -> WARNING!, ALLOW_TSANE=False/PAPER_INSTRUMENT=any -> UNABLE TO TRAIN RL, ALLOW_TSANE=True/PAPER_INSTRUMENT=True -> SAFE!
+ALLOW_TRAIN = True #FIXME, find that there are no delays when no train is allowed
 # ---  
-ALLOW_TRAIN = True #FIXME
-TRAIN_ON_FORECAST = False
-FORECAST_HORIZONS = 3
-STOP_TO_PLOT_EVERY = 5000000
-# ---  
+TRAIN_ON_RL = True # train the uwaabo/munaajpi
+TRAIN_ON_FORECAST = False # train the FORECAST; important it is to train FORECAST, but forecast means to know the future, forecast training is only enable while PEPER_INSTUMENT=False from a data source File  
 if(TRAIN_ON_FORECAST):assert(ALLOW_TRAIN and PAPER_INSTRUMENT)
+assert(not ALLOW_TRAIN ^ (TRAIN_ON_FORECAST or TRAIN_ON_RL)) # something must be trainable
+FORECAST_HORIZONS = [3,5,7,11] # in terms of ticks into the future 
+assert(all(_>1 for _ in FORECAST_HORIZONS)), "[BAD CONFIGURATION] forecast = 1 makes no scence, and 0 is not allowed"
+# ---  
+STOP_TO_PLOT_EVERY = 100
+STOP_LOSS_USDT = -100
 # ---  
 # ---  
 # ---  
@@ -130,8 +135,8 @@ cwcn_kemu_piaabo.seed_everything(seed=min(8191,torch.seed()//300000000000))
 class CWCN_DUURUVA_CONFIG:
     # --- --- --- 
     PLOT_LEVEL = 'mean,variance,value'
-    DUURUVA_MAX_COUNT = 100
-    DUURUVA_READY_COUNT = 50
+    DUURUVA_MAX_COUNT = 25
+    DUURUVA_READY_COUNT = 25
     MIN_STD = 0.0001
     # --- --- --- 
     ENABLE_DUURUVA_IMU = False #FIXME agent learns to get bad imu to lower the mean
@@ -154,18 +159,18 @@ class CWCN_OPTIONS:
     PLOT_FLAG           = True
     RENDER_FLAG         = False
     AHDO_PLOT_SETS=['imu,returns,value,price','imu,price,put_certainty,pass_certainty,call_certainty']#alliu:0, forecast_non_uwaabo
-    LEARNING_PLOT_SETS=['munaajpi_imibajcho,uwaabo_imibajcho,imibajcho']
+    LEARNING_PLOT_SETS=['uwaabo_imibajcho,munaajpi_imibajcho,tsane_imibajcho,forecast_imibajcho']
 # --- --- --- --- 
 class CWCN_INSTRUMENT_CONFIG:
     # --- --- --- 
     EXCHANGE = 'POLONIEX' #FIXME not used
     SYMBOL = SYMBOL_INSTRUMENT #FIXME functions refer to CWCN_INSTURMENT_CONF insted of symbol_instrumnet directly, 
     CURRENCY = 'USDT'
-    LEVERAGE="100"
+    LEVERAGE="50"
     # --- --- --- 
-    MULTIPLER = 10
+    MULTIPLER = 10/int(LEVERAGE)
     CONTRACT_VALUE = 10 #ADA
-    DELTA_COMMISSION = -0.0 # default is negative
+    DELTA_COMMISSION = -0.1 # default is negative
     # --- --- --- 
 # --- --- --- --- 
 class CWCN_FARM_CONFIG:
@@ -198,10 +203,10 @@ class CWCN_FARM_CONFIG:
 class CWCN_SIMULATION_CONFIG:
     # --- --- --- 
     INITIAL_WALLET={
-        "availableBalance": 100.0,
+        "availableBalance": 10.0,
         "realisedPnl": 0.0,
         "unrealisedPnl":0.0,
-        "marginBalance": 100.0,
+        "marginBalance": 10.0,
         "accountEquity":0.0,
         "positionMargin": 0.0,
         "orderMargin": 0.0,
@@ -233,16 +238,17 @@ class CWCN_UJCAMEI_CAJTUCU_CONFIG:
     # --- --- --- 
     TIME_DECREMENTAL_SEQUENCE = False # does the sequence input to the recurrent have in position [0] the most recent time stamp and [-1] the older (default to False, RNN default?)
     TSANE_ACTION_DICT = {
-        0:'put',
-        1:'pass',
-        2:'call'
+        0:'put', 
+        1:'pass', 
+        2:'call' 
     }
     # --- --- --- 
     # --- --- --- --- --- --- 
-    # --- --- --- 
-    MAX_POSITION_SIZE=1 # max amount of contracts
     CERTAINTY_FACTOR=0.0 # porcentaje de certeza en interválo [0,1]
-    TSANE_MIN_PROB_MARGIN=10
+    AMBIVALENCE_FACTOR=0.0#0.24 # diffenrence between buy and sell for such of be not pass
+    # --- --- --- 
+    MAX_POSITION_SIZE=2 # max amount of contracts
+    TSANE_MIN_PROB_MARGIN=25
     # --- --- --- 
     # --- --- --- --- --- --- 
     # --- --- --- 
@@ -307,7 +313,7 @@ class CWCN_UJCAMEI_CAJTUCU_CONFIG:
     # --- --- --- 
     POSITION_UPDATE_METHODS = {}
     WALLET_UPDATE_METHODS = {
-        'stop_loss': (lambda x : x.uc._clear_positions_() if x.unrealisedPnl is not None and x.unrealisedPnl < -99 else None)
+        'stop_loss': (lambda x : x.uc._clear_positions_() if x.unrealisedPnl is not None and x.unrealisedPnl < STOP_LOSS_USDT else None)
     }
     # --- --- --- 
 # --- --- --- --- 
@@ -331,22 +337,26 @@ class CWCN_CONFIG:
         self.ALWAYS_SAVING_MODEL_PATH = os.path.join(self.CHECKPOINTS_FOLDER,'alwayssaving.{}.wkymodel'.format(self.AHPA_ID))
         # --- --- 
         # --- --- 
+        self.APPEND_AHDO_QUEUE_PROFILE = 'imu'
         self.HIPER_PROFILE_BUFFER_COUNT = 3 # amount of trayetories queue in hold, default to 1 means train only on the last episode
+        # --- --- 
+        # --- --- -------- ---- ---- -- -- --- 
+        self.TEHDUJCO_LEARNING_RATE       = 4e-5
+        self.AHDO_STEPS          = 2**12
         # --- --- 
         # fixme add uwaabo
         # --- --- 
-        self.TRAINING_EPOCHS     = 32 # amount of mapps from HIPER_PROFILE_BUFFER_COUNT
-        self.AHDO_STEPS          = 256
-        self.MINI_BATCH_COUNT    = self.AHDO_STEPS//8 # lower due to training by .mean()
-        self.NUM_TESTS           = 3
-        self.VALIDATION_EPOCH    = 100 # how often to test the training # for standalone method
-        self.BREAK_TRAIN_EPOCH   = 1000 # max amount of EPOCHS # for standalone method
-        self.BREAK_TRAIN_IMU     = 0xFFFFFFFF
+        self.TRAINING_EPOCHS     = 5 # int(1//self.TEHDUJCO_LEARNING_RATE) # amount of mapps from HIPER_PROFILE_BUFFER_COUNT
+        self.MINI_BATCH_COUNT    = int(max(self.AHDO_STEPS//128,1)) # lower due to training by .mean()
+        self.TEST_STEPS          = int(max(self.AHDO_STEPS,24))
+        self.NUM_TESTS           = 1 # maybe wome fansy pants prime
+        self.VALIDATION_EPOCH    = 10000 # how often to test the training # for standalone method
+        self.BREAK_TRAIN_EPOCH   = 10000 # max amount of EPOCHS # for standalone method
+        self.BREAK_TRAIN_IMU     = 0xFFFFFFFF # reward limit that delivers the sign of complete training
         # --- --- 
         self.dropout_flag = False
-        self.dropout_prob = 0.0
+        self.dropout_prob = 0.15
         # --- --- 
-        self.TEHDUJCO_LEARNING_RATE       = 4e-5
         self.TEHDUJCO_GAMMA               = 0.99
         self.TEHDUJCO_GAE_LAMBDA          = 0.95
         self.TEHDUJCO_IMU_BETA            = 1.0 # takes no effect when duuruva imu is active
@@ -354,6 +364,7 @@ class CWCN_CONFIG:
         self.ReferencesToNoMeButWhoThoseAllWhoMadeRechableTheImplementationOfThisAlgorithm_TEHDUJCO_EPSILON         = 0.2 # tehdujco mean thank you.
         # --- --- 
         # self.IITEPI_BETA         = 0.01
+        self.FORECAST_BETA      = 1.0
         self.UWAABO_BETA         = 1.0
         self.MUNAAJPI_BETA       = 1.0
         self.IMIBAJCHO_MAX            = 5000 # loss
@@ -362,9 +373,11 @@ class CWCN_CONFIG:
         # --- ---
         self.RECURRENT_TYPE = 'GRU' #['LSTM', 'GRU']
         self.RECURRENT_HIDEN_SIZE = 18
-        self.RECURRENT_N_LAYERS = 16 #FIXME grow
-        self.UWAABO_HIDDEN_SIZE  = 32
-        self.MUNAAJPI_HIDDEN_SIZE= 16
+        self.RECURRENT_N_LAYERS = 4 #FIXME grow
+        self.UWAABO_HIDDEN_SIZE  = 36
+        self.FORECAST_HIDDEN_SIZE = 48
+        self.FORECAST_N_HORIZONS = len(FORECAST_HORIZONS)
+        self.MUNAAJPI_HIDDEN_SIZE = 16
         self.HIDDEN_BELLY_SIZE = 6
         # self.UWAABO_SHAPE  = (
         #         # Activation            # Layer
@@ -386,28 +399,29 @@ class CWCN_CONFIG:
         # --- ---
         # --- ---
     def _ray_config_(self):
-        # --- ---
-        self.ray_prtnt_flag = True
-        self.export_flag = True
-        self.close_at_finish =True
-        # --- --- 
-        self.RAY_CHECKPOINTS_FOLDER  = os.path.normpath(os.path.join(os.path.realpath(__file__),'../ray_checkpoints'))
-        self.RAY_N_TRAILS        = 5000
-        # --- --- 
-        self.TEHDUJCO_LEARNING_RATE       = tune.loguniform(1e-5, 1e-3,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
-        self.TEHDUJCO_GAMMA               = tune.loguniform(1e-3, 1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
-        self.TEHDUJCO_GAE_LAMBDA          = tune.loguniform(1e-3, 1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
-        self.TEHDUJCO_IMU_BETA         = tune.loguniform(1e-5, 1e-1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
-        self.TEHDUJCO_ENTROPY_BETA        = tune.loguniform(1e-5, 1e-1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
-        # --- ---
-        self.UJCAMEI_ALLIU_SEQUENCE_SIZE = tune.sample_from(lambda _: 2**np.random.randint(2, 9))
-        # --- ---
-        self.MUNAAJPI_BETA       = tune.loguniform(1e-5, 1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
-        self.UWAABO_BETA         = tune.loguniform(1e-5, 1,)
-        self.RECURRENT_HIDEN_SIZE= tune.sample_from(lambda _: 2**np.random.randint(2, 9))
-        self.RECURRENT_N_LAYERS  = tune.sample_from(lambda _: 2**np.random.randint(1, 4))
-        self.UWAABO_HIDDEN_SIZE  = tune.sample_from(lambda _: 2**np.random.randint(2, 9))
-        self.MUNAAJPI_HIDDEN_SIZE= tune.sample_from(lambda _: 2**np.random.randint(2, 9))
+        # --- --- BROKEN
+        assert(0xFF), 'bproken ray' #broken
+        # # # self.ray_prtnt_flag = True
+        # # # self.export_flag = True
+        # # # self.close_at_finish =True
+        # # # # --- --- 
+        # # # self.RAY_CHECKPOINTS_FOLDER  = os.path.normpath(os.path.join(os.path.realpath(__file__),'../ray_checkpoints'))
+        # # # self.RAY_N_TRAILS        = 5000
+        # # # # --- --- 
+        # # # self.TEHDUJCO_LEARNING_RATE       = tune.loguniform(1e-5, 1e-3,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
+        # # # self.TEHDUJCO_GAMMA               = tune.loguniform(1e-3, 1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
+        # # # self.TEHDUJCO_GAE_LAMBDA          = tune.loguniform(1e-3, 1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
+        # # # self.TEHDUJCO_IMU_BETA         = tune.loguniform(1e-5, 1e-1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
+        # # # self.TEHDUJCO_ENTROPY_BETA        = tune.loguniform(1e-5, 1e-1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
+        # # # # --- ---
+        # # # self.UJCAMEI_ALLIU_SEQUENCE_SIZE = tune.sample_from(lambda _: 2**np.random.randint(2, 9))
+        # # # # --- ---
+        # # # self.MUNAAJPI_BETA       = tune.loguniform(1e-5, 1,CWCN_UJCAMEI_CAJTUCU_CONFIG.IMU_COUNT)
+        # # # self.UWAABO_BETA         = tune.loguniform(1e-5, 1,)
+        # # # self.RECURRENT_HIDEN_SIZE= tune.sample_from(lambda _: 2**np.random.randint(2, 9))
+        # # # self.RECURRENT_N_LAYERS  = tune.sample_from(lambda _: 2**np.random.randint(1, 4))
+        # # # self.UWAABO_HIDDEN_SIZE  = tune.sample_from(lambda _: 2**np.random.randint(2, 9))
+        # # # self.MUNAAJPI_HIDDEN_SIZE= tune.sample_from(lambda _: 2**np.random.randint(2, 9))
         # --- --- 
         # self.IITEPI_HIDDEN_SIZE=32
 # --- --- --- --- 
@@ -423,6 +437,11 @@ class CWCN_COLORS:
     DANGER = '\033[41m'
     RED = '\033[31m'
     UNDERLINE = '\033[4m'
+    PRICE = '\033[0;32m'
+    YELLOW = '\033[1;33m'
+    DARKGRAY = '\033[1;30m'
+    GRAY = '\033[0;37m'
+    WHITE = '\033[1;37m'
 class CWCN_CURSOR: #FIXME not in use
     UP='\033[A'
     DOWN='\033[B'
@@ -432,5 +451,5 @@ class CWCN_CURSOR: #FIXME not in use
     CARRIER_RETURN='\r'
 # --- --- --- --- 
 # logging.info('Loading configuration file {}'.format(os.environ['CWCN_CONFIG']))
-logging.info('Loading configuration file {}'.format(os.path.realpath(__file__)))
+logging.info('Loading from source the configuration file {}. '.format(os.path.realpath(__file__)))
 # --- --- --- --- 

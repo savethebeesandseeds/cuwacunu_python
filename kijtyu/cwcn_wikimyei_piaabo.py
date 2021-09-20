@@ -50,8 +50,9 @@ class AHDO_PROFILE: # the trayectory is a single step
         self.selec_prob = None
         # --- --- 
         if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
-            self.forecast_non_uwaabo = None
-            self.tsane_non_uwaabo = None
+            self.forecast_uwaabo_vect = None # is a vector, or array, or list, not sure #FIXME?
+            self.forecast_non_uwaabo_vect = None # is a vector, or array, or list, not sure #FIXME?
+            # self.tsane_non_uwaabo = {}
         # --- --- 
         self.certainty=None # vector [put/pass/call] or as declared in cwcn_config.UJCAMEI....TSANE_ACTION_DICT
         self.put_certainty=None

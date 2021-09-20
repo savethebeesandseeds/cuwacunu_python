@@ -15,6 +15,7 @@ import cwcn_tsinuu_piaabo
 import cwcn_kemu_piaabo
 import cwcn_jkimyei_piaabo
 # --- --- --- --- 
+# torch.autograd.set_detect_anomaly(True)
 # --- --- --- ---
 # Based on https://github.com/higgsfield/RL-Adventure-2/blob/master/3.ppo.ipynb
 # Based on https://github.com/colinskow/move37/tree/master/ppo
@@ -24,7 +25,9 @@ class JKIMYEI_PPO:
         # --- --- 
         self.jk_wikimyei=_wikimyei
         # --- --- 
-        self.optimizer=optim.Adam(_wikimyei.model.parameters(), lr=_wikimyei.wk_config['TEHDUJCO_LEARNING_RATE'])
+        self.rl_optimizer=optim.Adam(_wikimyei.model.rl_parameters, lr=_wikimyei.wk_config['TEHDUJCO_LEARNING_RATE'])
+        self.forecast_optimizer=optim.Adam(_wikimyei.model.forescast_parameters, lr=_wikimyei.wk_config['TEHDUJCO_LEARNING_RATE'])
+        # --- --- 
         self.munaajpi_imibajcho_fun=torch.nn.MSELoss()
         # --- --- 
         self.ahdo_queue=cwcn_wikimyei_piaabo.AHDO_LOAD_QUEUE() # step profile queue
@@ -33,6 +36,8 @@ class JKIMYEI_PPO:
         self.learning_queue=cwcn_wikimyei_piaabo.LEARNING_LOAD_QUEUE() # load of training profile
         # --- --- 
         self.uwaabo_forecast_imibajcho_fun=torch.nn.MSELoss()
+        # --- --- 
+        self.super_epoch = 0
         # --- --- 
     def _jkmimyei_gae_(self):
         if(not cwcn_config.ALLOW_TRAIN):
@@ -45,7 +50,7 @@ class JKIMYEI_PPO:
         # --- --- 
         gamma=self.jk_wikimyei.wk_config['TEHDUJCO_GAMMA']
         lam=self.jk_wikimyei.wk_config['TEHDUJCO_GAE_LAMBDA']
-        _, next_value,__ = self.jk_wikimyei.model(self.jk_wikimyei.wk_state.c_alliu.unsqueeze(0)) # dist, value, energy, certainty
+        _, next_value,__,___ = self.jk_wikimyei.model(self.jk_wikimyei.wk_state.c_alliu.unsqueeze(0)) # tsane_dist, value, energy, certainty
         c_load_dict = self.ahdo_queue._dict_vectorize_queue_()
         c_load_dict['value'].append(next_value)
         gae = 0
@@ -92,68 +97,90 @@ class JKIMYEI_PPO:
             for _trayectory in c_trayectory_load._random_queue_yield_by_prob_(_dict_vectorize_flag=True,_tensorize_flag=True):
                 jk_profile=cwcn_jkimyei_piaabo.LEARNING_PROFILE()
                 jk_profile.batch_size=len(_trayectory['alliu'])
+                # print(jk_profile.batch_size)
                 # jk_profile.p_trayectory=_trayectory #FIXME, not in use, not appended correctly
                 # --- ---
                 # _trayectory['alliu'].requires_graph=True
                 # _trayectory['action'].requires_graph=True
                 # _trayectory['log_prob'].requires_graph=True
                 # print("STATE FORM:",_trayectory['alliu'])
+                # print("[advantage!:] {}".format(advantage))
+                # print("[index!:] {}".format([_trayectory['index']]))
+                # print("[alliu!:] {}".format([_trayectory['alliu']]))
+                # --- --- 
                 alliu=torch.detach(_trayectory['alliu'])
                 old_log_probs=torch.detach(_trayectory['log_prob'])
                 advantage=torch.detach(_trayectory['advantage'])
                 returns=torch.detach(_trayectory['returns'])
-                # print("[advantage!:] {}".format(advantage))
-                # print("[index!:] {}".format([_trayectory['index']]))
-                # --- --- 
                 alliu.requires_grad=True
                 old_log_probs.requires_grad=True
                 advantage.requires_grad=True
                 returns.requires_grad=True
                 # --- --- 
-                dist, value, certainty=self.jk_wikimyei.model(alliu) # dist, value, energy
-                # print("[size of sate:] {}, [dist:] {}".format(alliu.shape, dist))
-                entropy=dist.entropy().mean()
-                _, new_probs, new_log_probs,___=self.jk_wikimyei._dist_to_tsane_(dist)
-                # --- --- 
-                jk_profile.ratio=(new_log_probs - old_log_probs).exp()
-                jk_profile.surr1=jk_profile.ratio * advantage
-                jk_profile.surr2=torch.clamp(jk_profile.ratio, 1.0 - clip_param, 1.0 + clip_param) * advantage
-                # --- ---
-                # IITEPI_BETA... #FIXME add iitepi as the exploration network
-                jk_profile.uwaabo_imibajcho =- self.jk_wikimyei.wk_config['UWAABO_BETA'] * torch.min(jk_profile.surr1, jk_profile.surr2).mean() #FIXME mean is tricky, util only due to pytorch great tools
-                # jk_profile.munaajpi_imibajcho=self.jk_wikimyei.wk_config['MUNAAJPI_BETA'] * (returns - value).pow(2).mean() #FIXME mean is tricky to implement in c, using a sign multiplication
-                jk_profile.munaajpi_imibajcho=self.jk_wikimyei.wk_config['MUNAAJPI_BETA'] * self.munaajpi_imibajcho_fun(returns, value)
-                jk_profile.uwaabo_imibajcho=torch.clamp(jk_profile.uwaabo_imibajcho,min=self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'],max=self.jk_wikimyei.wk_config['IMIBAJCHO_MAX'])
-                jk_profile.munaajpi_imibajcho=torch.clamp(jk_profile.munaajpi_imibajcho,min=self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'],max=self.jk_wikimyei.wk_config['IMIBAJCHO_MAX'])
+                tsane_dist, value, certainty, c_forecast_uwaabo_vect=self.jk_wikimyei.model(alliu) # tsane_dist, value, energy
+                # print("[size of sate:] {}, [tsane_dist:] {}".format(alliu.shape, tsane_dist))
+                if(cwcn_config.TRAIN_ON_RL):
+                    entropy=tsane_dist.entropy().mean()
+                    _, new_probs, new_log_probs,___=self.jk_wikimyei._dist_to_tsane_(tsane_dist)
+                    # --- --- 
+                    jk_profile.ratio=(new_log_probs - old_log_probs).exp()
+                    jk_profile.surr1=jk_profile.ratio * advantage
+                    jk_profile.surr2=torch.clamp(jk_profile.ratio, 1.0 - clip_param, 1.0 + clip_param) * advantage
+                    # --- ---
+                    # IITEPI_BETA... #FIXME add iitepi as the exploration network
+                    jk_profile.uwaabo_imibajcho =- self.jk_wikimyei.wk_config['UWAABO_BETA'] * torch.min(jk_profile.surr1, jk_profile.surr2).mean() #FIXME mean is tricky, util only due to pytorch great tools
+                    # jk_profile.munaajpi_imibajcho=self.jk_wikimyei.wk_config['MUNAAJPI_BETA'] * (returns - value).pow(2).mean() #FIXME mean is tricky to implement in c, using a sign multiplication
+                    jk_profile.munaajpi_imibajcho=self.jk_wikimyei.wk_config['MUNAAJPI_BETA'] * self.munaajpi_imibajcho_fun(returns, value)
+                    jk_profile.uwaabo_imibajcho=torch.clamp(jk_profile.uwaabo_imibajcho,min=self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'],max=self.jk_wikimyei.wk_config['IMIBAJCHO_MAX'])
+                    jk_profile.munaajpi_imibajcho=torch.clamp(jk_profile.munaajpi_imibajcho,min=self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'],max=self.jk_wikimyei.wk_config['IMIBAJCHO_MAX'])
                 # --- ---                 
                 if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
-                    jk_profile.imibajcho=\
-                        self.jk_wikimyei.wk_config['UWAABO_BETA'] * self.uwaabo_forecast_imibajcho_fun(new_probs,_trayectory['tsane_non_uwaabo']) \
-                            + jk_profile.munaajpi_imibajcho 
-                                # + jk_profile.uwaabo_imibajcho \
-                                #     - self.jk_wikimyei.wk_config['TEHDUJCO_ENTROPY_BETA'] * entropy
-                else:
-                    jk_profile.imibajcho=\
+                    if(torch.any(torch.isnan(c_forecast_uwaabo_vect)) or torch.any(torch.isnan(_trayectory['forecast_non_uwaabo_vect']))):
+                        jk_profile.forecast_imibajcho=None
+                        logging.warning("[jk_profile.forecast_imibajcho] is {}".format(jk_profile.forecast_imibajcho))
+                    else:
+                        jk_profile.forecast_imibajcho=\
+                            self.jk_wikimyei.wk_config['FORECAST_BETA'] * self.uwaabo_forecast_imibajcho_fun(c_forecast_uwaabo_vect,_trayectory['forecast_non_uwaabo_vect'])
+                if(cwcn_config.TRAIN_ON_RL):
+                    jk_profile.tsane_imibajcho=\
                         jk_profile.munaajpi_imibajcho \
                             + jk_profile.uwaabo_imibajcho \
                                 - self.jk_wikimyei.wk_config['TEHDUJCO_ENTROPY_BETA'] * entropy
-                # logging.jkimyei_logging("uwaabo_imibajcho: {}, \t munaajpi_imibajcho: {}, \t imibajcho: {}".format(jk_profile.uwaabo_imibajcho.size(),jk_profile.munaajpi_imibajcho.size(),jk_profile.imibajcho.size()))
-                # logging.jkimyei_logging("uwaabo_imibajcho: {:.4f}, \t munaajpi_imibajcho: {:.4f}, \t imibajcho: {:.4}".format(jk_profile.uwaabo_imibajcho,jk_profile.munaajpi_imibajcho, jk_profile.imibajcho))
+                # logging.jkimyei_logging("uwaabo_imibajcho: {}, \t munaajpi_imibajcho: {}, \t imibajcho: {}".format(jk_profile.uwaabo_imibajcho.size(),jk_profile.munaajpi_imibajcho.size(),jk_profile.tsane_imibajcho.size()))
+                # logging.jkimyei_logging("uwaabo_imibajcho: {:.4f}, \t munaajpi_imibajcho: {:.4f}, \t imibajcho: {:.4}".format(jk_profile.uwaabo_imibajcho,jk_profile.munaajpi_imibajcho, jk_profile.tsane_imibajcho))
                 # if(abs(jk_profile.uwaabo_imibajcho)>=min(abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MAX']),abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MIN'])) or abs(jk_profile.munaajpi_imibajcho)>=min(abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MAX']),abs(self.jk_wikimyei.wk_config['IMIBAJCHO_MIN']))):
                 #     logging.jkimyei_logging("[jk_profile] : {}".format([(_k,jk_profile.__dict__[_k]) for j_k in jk_profile.__dict__.keys()]))
                 #     logging.jkimyei_logging("[jk_profile] : {}".format([(_k,jk_profile.__dict__[_k].shape) for _k in jk_profile.__dict__.keys() if _k not in ['p_trayectory','index','batch_size']]))
                 #     input("STOP...")
-                # --- ---
-                self.optimizer.zero_grad()
-                jk_profile.imibajcho.backward()
-                self.optimizer.step()
-                # --- ---
+                # --- --- TRAIN UWAABO TSANE
+                if(cwcn_config.TRAIN_ON_RL):
+                    self.rl_optimizer.zero_grad()
+                    jk_profile.tsane_imibajcho.backward(retain_graph=True)
+                    self.rl_optimizer.step()
+                # --- --- (if) TRAIN FORECAST
+                if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST and jk_profile.forecast_imibajcho is not None):
+                    self.forecast_optimizer.zero_grad()
+                    jk_profile.forecast_imibajcho.backward(retain_graph=False) # retain_graph=False is the default
+                    self.forecast_optimizer.step()
+                # --- --- 
                 self.learning_queue._append_(jk_profile,_detach_flag=True)
-                # --- ---
-                logging.jkimyei_logging("--- Train epoch {} / step : {} :: imibajcho: {:.4f},\tuwaabo_imibajcho: {:.4f},\tmunaajpi_imibajcho: {:.4f}".format(count_epoch,count_steps, jk_profile.imibajcho, jk_profile.uwaabo_imibajcho,jk_profile.munaajpi_imibajcho))
+                # --- --- 
+                if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST and cwcn_config.TRAIN_ON_RL):
+                    logging.info("--- [Train epoch] : {} : [e]{}/[s]{} :-: tsane_imibajcho : {:.4f},\t[uwaabo_imibajcho] : {:.4f},\t[munaajpi_imibajcho] : {:.4f},\t[forecast_imibajcho] : {:.4f}".format(self.super_epoch,count_epoch,count_steps, jk_profile.tsane_imibajcho, jk_profile.uwaabo_imibajcho,jk_profile.munaajpi_imibajcho,jk_profile.forecast_imibajcho))
+                elif(cwcn_config.TRAIN_ON_RL and not (cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST)):
+                    logging.info("--- [Train epoch] : {} : [e]{}/[s]{} :-: tsane_imibajcho : {:.4f},\t[uwaabo_imibajcho] : {:.4f},\t[munaajpi_imibajcho] : {:.4f}".format(self.super_epoch,count_epoch,count_steps, jk_profile.tsane_imibajcho, jk_profile.uwaabo_imibajcho,jk_profile.munaajpi_imibajcho))
+                elif(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST and not cwcn_config.TRAIN_ON_RL):
+                    if(jk_profile.forecast_imibajcho is None):
+                        jk_profile.forecast_imibajcho=torch.tensor([0.0]).squeeze(0).to(cwcn_config.device)
+                    logging.info("--- [Train epoch] : {} : [e]{}/[s]{} :-: [forecast_imibajcho] : {:.4f}".format(self.super_epoch,count_epoch,count_steps,jk_profile.forecast_imibajcho))
+                else:
+                    logging.warning("--- [Train epoch] : {} : [e]{}/[s]{} :-: [not training configured]".format(self.super_epoch,count_epoch,count_steps))
+                # --- --- 
                 count_steps+=1
             count_epoch+=1
+        self.super_epoch+=1
     def _jkimyei_wikimyei_(self):
+        logging.info("running _jkimyei_wikimyei_")
         if(not cwcn_config.ALLOW_TRAIN):
             logging.warning("Training is not allowed, skipping training")
             return None
@@ -169,12 +196,19 @@ class JKIMYEI_PPO:
             self.ahdo_queue._append_(ahdo_t,_detach_flag=True)
             if(done):
                 break
+        logging.info("running _jkmimyei_gae_")
         self._jkmimyei_gae_()
         self.hyper_ahdo_profile._hyper_append_(\
             _item=self.ahdo_queue,
             _total_imu=self.jk_wikimyei.wk_state.accomulated_imu,
             _selec_prob=self.jk_wikimyei.wk_state.accomulated_imu) #FIXME not uniform
+        logging.info("running _jkimyei_ppo_update_")
         self._jkimyei_ppo_update_()
+        # TEST
+        logging.info("running _test_wikimyei_on_ahpa_")
+        _, __ = self.jk_wikimyei._test_wikimyei_on_ahpa_()
+        # SAVE
+        logging.info("running ALWAYS_SAVING_MODEL")
         if(cwcn_config.CWCN_CONFIG().ALWAYS_SAVING_MODEL):
             self.jk_wikimyei._save_wikimyei_(cwcn_config.CWCN_CONFIG().ALWAYS_SAVING_MODEL_PATH)
         # --- --- 
@@ -193,7 +227,7 @@ class JKIMYEI_PPO:
             self._jkimyei_wikimyei_()
             # --- --- --- Eval
             if train_epoch % self.jk_wikimyei.wk_config['VALIDATION_EPOCH'] == 0:
-                early_stop, test_imu = self.jk_wikimyei._test_wikimyei_on_ahpa_(render=cwcn_config.CWCN_OPTIONS.RENDER_FLAG)
+                early_stop, test_imu = self.jk_wikimyei._test_wikimyei_on_ahpa_()
             # --- --- --- PRINT
             if(cwcn_config.CWCN_OPTIONS.PLOT_FLAG and train_epoch%cwcn_config.CWCN_OPTIONS.PLOT_INTERVAL==0):
                 for _ps in cwcn_config.CWCN_OPTIONS.AHDO_PLOT_SETS:

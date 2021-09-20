@@ -695,12 +695,12 @@ class TradeClient:
         for _pos_d in all_positions_details:
             if(abs(_pos_d['currentQty'])>0):
                 logging.info("clear position por symbol : {}".format(_pos_d['symbol']))
-                order_data=c_trade_instrument.trade_instrument.create_market_order(
+                order_data=self.create_market_order(
                     symbol=_pos_d['symbol'],
                     side='sell' if _pos_d['currentQty']>0 else 'buy',
                     size=abs(_pos_d['currentQty']),
                     leverage=cwcn_config.CWCN_INSTRUMENT_CONFIG.LEVERAGE)
-            c_trade_instrument.trade_instrument.cancel_all_orders(_pos_d['symbol'])
+            self.cancel_all_orders(_pos_d['symbol'])
         logging.warning("all positions clear in {}s".format(t_init-time.time()))
         return True
     def _reset_(self):

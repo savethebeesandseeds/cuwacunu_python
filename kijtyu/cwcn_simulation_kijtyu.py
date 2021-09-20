@@ -52,7 +52,8 @@ class EXCHANGE_INSTRUMENT:
             "ts": self.market_instrument._instrument_state['ts'],
         }
         if(cwcn_config.PAPER_INSTRUMENT and cwcn_config.TRAIN_ON_FORECAST):
-            _tick_data['forecast_non_uwaabo']=self.market_instrument._instrument_state['forecast_non_uwaabo']
+            for c_forecast_horizon in cwcn_config.FORECAST_HORIZONS:
+                _tick_data['forecast_non_uwaabo:{}'.format(c_forecast_horizon)]=self.market_instrument._instrument_state['forecast_non_uwaabo:{}'.format(c_forecast_horizon)]
         # --- --- --- --- --- 
         self.call_function({
             'topic':'/contractAccount/wallet',
@@ -87,12 +88,14 @@ class MarketClient:
                 file_ticks.append(ast.literal_eval(_fc))
             except:
                 logging.warning("Failed to enhance line file content : {}".format(_fc))
-        for _idn,_ft in enumerate(file_ticks[:-cwcn_config.FORECAST_HORIZONS]):
-            _ft['forecast_non_uwaabo']=0
-            for _idh in range(cwcn_config.FORECAST_HORIZONS):
-                _ft['forecast_non_uwaabo']+=file_ticks[_idn+_idh]['price']-_ft['price']
-            _ft['forecast_non_uwaabo']/=cwcn_config.FORECAST_HORIZONS
-        file_ticks=file_ticks[:-cwcn_config.FORECAST_HORIZONS]
+        
+        for _idn,_ft in enumerate(file_ticks[:-max(cwcn_config.FORECAST_HORIZONS)]):
+            for c_forecast_horizon in cwcn_config.FORECAST_HORIZONS:
+                _ft['forecast_non_uwaabo:{}'.format(c_forecast_horizon)]=0
+                for _idh in range(c_forecast_horizon):
+                    _ft['forecast_non_uwaabo:{}'.format(c_forecast_horizon)]+=file_ticks[_idn+_idh]['price']-_ft['price']
+                _ft['forecast_non_uwaabo:{}'.format(c_forecast_horizon)]/=c_forecast_horizon
+        file_ticks=file_ticks[:-max(cwcn_config.FORECAST_HORIZONS)]
         # --- --- --- save
         self._request_file_path = os.path.join(cwcn_config.CWCN_SIMULATION_CONFIG.DATA_FOLDER,"{}.forecast{}".format(cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL,cwcn_config.CWCN_SIMULATION_CONFIG.DATA_EXTENSION))
         with open(self._request_file_path,'w') as _f_:
@@ -176,11 +179,11 @@ class TradeClient:
         else:
             self.client_orders.pop(c_match_order[0])
             self.ei.user_instrument._apply_delta_aviableBalance_(c_match_order[1]['orderPnl'])
-            if(c_match_order[1]['orderPnl']>=0):
-                sys.stdout.write("{}{}{}\t\t\t\t\t\t\t\t\t\t\t\t{}{}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,cwcn_config.CWCN_COLORS.GREEN,c_match_order[1]['orderPnl'],cwcn_config.CWCN_COLORS.REGULAR))
-            else:
-                sys.stdout.write("{}{}{}\t\t\t\t\t\t\t\t\t\t\t\t{}{}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,cwcn_config.CWCN_COLORS.RED,c_match_order[1]['orderPnl'],cwcn_config.CWCN_COLORS.REGULAR))
-            sys.stdout.flush()
+            # if(c_match_order[1]['orderPnl']>=0):
+            #     sys.stdout.write("{}{}{}\t\t\t\t\t\t\t\t\t\t\t\t{}{}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,cwcn_config.CWCN_COLORS.GREEN,c_match_order[1]['orderPnl'],cwcn_config.CWCN_COLORS.REGULAR))
+            # else:
+            #     sys.stdout.write("{}{}{}\t\t\t\t\t\t\t\t\t\t\t\t{}{}\n".format(cwcn_config.CWCN_CURSOR.CARRIER_RETURN,cwcn_config.CWCN_CURSOR.UP,cwcn_config.CWCN_COLORS.RED,c_match_order[1]['orderPnl'],cwcn_config.CWCN_COLORS.REGULAR))
+            # sys.stdout.flush()
         self.ei.user_instrument._update_account_overview_() #FIXME maybe redundant
     def _get_isOpen_(self):
         return any([_o['isOpen'] for _o in self.client_orders])
@@ -298,7 +301,9 @@ class TradeClient:
             self.client_orders = [_oo for _oo in self.client_orders if _oo['clientOid'] != order_id]
         return True #FIXME check if order can be canceled
 
-    def clear_positions(self,symbol):
+    def clear_positions(self,symbol=None):
+        if(symbol is None):
+            symbol=cwcn_config.CWCN_INSTRUMENT_CONFIG.SYMBOL
         # to cancel an order is NOT to clear the position, only open orders can be cancel
         for _o in self.client_orders:
             if(_o['isOpen']):

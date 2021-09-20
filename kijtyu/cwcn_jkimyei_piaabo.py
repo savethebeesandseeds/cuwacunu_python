@@ -18,7 +18,8 @@ class LEARNING_PROFILE:
         self.surr2              = None
         self.uwaabo_imibajcho   = None
         self.munaajpi_imibajcho = None
-        self.imibajcho          = None
+        self.tsane_imibajcho    = None
+        self.forecast_imibajcho = None
         self.index              = None
         self.batch_size         = None
         # --- --- 
@@ -71,7 +72,11 @@ class HYPER_PROFILE_QUEUE:
         for _ in range(_yield_count):
             load_index=list(range(0, self.load_size))
             load_probs=list([_l_itm.__dict__['p_selec_prob'] for _l_itm in self.load_queue])
-            rand_idx = np.random.choice(a=load_index,p=load_probs) # item probability
+            load_probs/=sum(load_probs)
+            try:
+                rand_idx = np.random.choice(a=load_index,p=load_probs) # item probability
+            except:# Default
+                rand_idx = len(self.load_queue)-1 
             yield self.load_queue[rand_idx]
     def _random_queue_yield_uniform_(self,_yield_count):
         for _ in range(_yield_count):

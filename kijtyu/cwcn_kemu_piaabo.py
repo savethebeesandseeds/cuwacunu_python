@@ -99,67 +99,70 @@ def kemu_pretty_print_object(d, indent=0, set_ident=26):
 # #         # --- ---
 
 def kemu_plot_queue_item(c_queue,itm):
-    d_vects=c_queue._dict_vectorize_queue_(_type='array')
-    class Labeloffset():
-        def __init__(self,  ax, label="", axis="y"):
-            self.axis = {"y":ax.yaxis, "x":ax.xaxis}[axis]
-            self.label=label
-            ax.callbacks.connect(axis+'lim_changed', self.update)
-            ax.figure.canvas.draw()
-            self.update(None)
-        def update(self, lim):
-            fmt = self.axis.get_major_formatter()
-            self.axis.offsetText.set_visible(False)
-            self.axis.set_label_text(self.label + " "+ fmt.get_offset() )
-    # --- ---
-    color_pallete=cwcn_config.CWCN_OPTIONS.COLOR_PALLETE
-    # --- ---
-    fig, ax = plt.subplots(1, 1)
-    # ax.set_title("{}".format(),color=(1,1,1),**{'fontname':'DejaVu Sans'})
-    # Plot data
-    c_yielder=(_pl for _pl in itm.split(','))
-    ax.legend(itm)
-    ax.set_title("{} // {}".format(ax.get_title(),itm),color=(1,1,1),**{'fontname':'DejaVu Sans'})
-    # --- ---
-    ax.yaxis.offsetText.set_visible(False)
-    ax.set_facecolor((0,0,0))
-    ax.xaxis.label.set_color('white')
-    ax.spines['bottom'].set_color('white')
-    ax.spines['top'].set_color('white')
-    ax.spines['right'].set_color('white')
-    ax.spines['left'].set_color('white')
-    aux_twinx=[ax.twinx()]
-    for _c,_i in enumerate(c_yielder):
+    try:
+        d_vects=c_queue._dict_vectorize_queue_(_type='array')
+        class Labeloffset():
+            def __init__(self,  ax, label="", axis="y"):
+                self.axis = {"y":ax.yaxis, "x":ax.xaxis}[axis]
+                self.label=label
+                ax.callbacks.connect(axis+'lim_changed', self.update)
+                ax.figure.canvas.draw()
+                self.update(None)
+            def update(self, lim):
+                fmt = self.axis.get_major_formatter()
+                self.axis.offsetText.set_visible(False)
+                self.axis.set_label_text(self.label + " "+ fmt.get_offset() )
         # --- ---
-        if(":" not in _i):
-            d_vect=d_vects[_i]
-            if(d_vect.shape[0]==1): 
-                d_vect=d_vects[_i][0]
-        else:
-            d_vect=[_d[int(_i.split(':')[1])] for _d in d_vects[_i.split(':')[0]]]
-            # d_vect=d_vects[_i.split(':')[0]][_i.split(':')[1]]
-        # --- --- 
-        # print("{} : {}".format(_i,len(d_vect)))
-        # aux_twinx.append(ax)
-        aux_twinx[_c].yaxis.offsetText.set_visible(False)
-        aux_twinx[_c].yaxis.label.set_color(color_pallete[_c])
-        aux_twinx[_c].yaxis.set_label_coords(1.025+.1*_c,0.5)
-        aux_twinx[_c].spines.left.set_position(("axes", 1.+.1*_c))
-        aux_twinx[_c].spines['left'].set_color(color_pallete[_c])
-        aux_twinx[_c].tick_params(colors=color_pallete[_c],which='both')
-        aux_twinx[_c].plot(d_vect, linewidth=0.3,color=color_pallete[_c])
-        # aux_twinx[_c].tick_params(axis='y')
-        # aux_twinx[_c].set_ylabel(_i)
-        formatter = mticker.ScalarFormatter(useMathText=True)
-        formatter.set_powerlimits((-3,2))
-        aux_twinx[_c].yaxis.set_major_formatter(formatter)
-        lo = Labeloffset(aux_twinx[_c], label=_i, axis="y")
-        aux_twinx.append(aux_twinx[_c].twinx())
-        # --- --- 
-        # print(_i,d_vects[_i].shape)
-        # input()
-        # --- --- 
-    fig.canvas.manager.full_screen_toggle()
-    fig.patch.set_facecolor((0,0,0))
-    fig.tight_layout()
-    # --- ---
+        color_pallete=cwcn_config.CWCN_OPTIONS.COLOR_PALLETE
+        # --- ---
+        fig, ax = plt.subplots(1, 1)
+        # ax.set_title("{}".format(),color=(1,1,1),**{'fontname':'DejaVu Sans'})
+        # Plot data
+        c_yielder=(_pl for _pl in itm.split(','))
+        ax.legend(itm)
+        ax.set_title("{} // {}".format(ax.get_title(),itm),color=(1,1,1),**{'fontname':'DejaVu Sans'})
+        # --- ---
+        ax.yaxis.offsetText.set_visible(False)
+        ax.set_facecolor((0,0,0))
+        ax.xaxis.label.set_color('white')
+        ax.spines['bottom'].set_color('white')
+        ax.spines['top'].set_color('white')
+        ax.spines['right'].set_color('white')
+        ax.spines['left'].set_color('white')
+        aux_twinx=[ax.twinx()]
+        for _c,_i in enumerate(c_yielder):
+            # --- ---
+            if(":" not in _i):
+                d_vect=d_vects[_i]
+                if(d_vect.shape[0]==1): 
+                    d_vect=d_vects[_i][0]
+            else:
+                d_vect=[_d[int(_i.split(':')[1])] for _d in d_vects[_i.split(':')[0]]]
+                # d_vect=d_vects[_i.split(':')[0]][_i.split(':')[1]]
+            # --- --- 
+            # print("{} : {}".format(_i,len(d_vect)))
+            # aux_twinx.append(ax)
+            aux_twinx[_c].yaxis.offsetText.set_visible(False)
+            aux_twinx[_c].yaxis.label.set_color(color_pallete[_c])
+            aux_twinx[_c].yaxis.set_label_coords(1.025+.1*_c,0.5)
+            aux_twinx[_c].spines.left.set_position(("axes", 1.+.1*_c))
+            aux_twinx[_c].spines['left'].set_color(color_pallete[_c])
+            aux_twinx[_c].tick_params(colors=color_pallete[_c],which='both')
+            aux_twinx[_c].plot(d_vect, linewidth=0.3,color=color_pallete[_c])
+            # aux_twinx[_c].tick_params(axis='y')
+            # aux_twinx[_c].set_ylabel(_i)
+            formatter = mticker.ScalarFormatter(useMathText=True)
+            formatter.set_powerlimits((-3,2))
+            aux_twinx[_c].yaxis.set_major_formatter(formatter)
+            lo = Labeloffset(aux_twinx[_c], label=_i, axis="y")
+            aux_twinx.append(aux_twinx[_c].twinx())
+            # --- --- 
+            # print(_i,d_vects[_i].shape)
+            # input()
+            # --- --- 
+        fig.canvas.manager.full_screen_toggle()
+        fig.patch.set_facecolor((0,0,0))
+        fig.tight_layout()
+        # --- ---
+    except Exception as e:
+        logging.error("error on kemu_plot queue item : {}".format(e))
